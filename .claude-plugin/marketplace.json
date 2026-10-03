@@ -1,0 +1,12 @@
+{
+  "name": "claude-forge",
+  "description": "Skills and mods for Claude Code",
+  "owner": { "name": "IT-BAER" },
+  "plugins": [
+    {
+      "name": "file-explorer",
+      "source": "./mods/file-explorer",
+      "description": "VS Code style file tree of the session's working directory in a pane"
+    }
+  ]
+}

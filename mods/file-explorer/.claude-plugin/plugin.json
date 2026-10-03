@@ -1,6 +1,6 @@
 {
   "name": "file-explorer",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "VS Code style file tree of the session's working directory in a pane",
   "types": "./types/index.d.ts"
 }

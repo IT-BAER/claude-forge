@@ -7,6 +7,29 @@ export type Preview = {
   markdown: boolean
   rendered: boolean
   notice: string
+  realPath?: string
+  editable?: boolean
+  draft?: string
+  savedText?: string
+  hash?: string
+  encoding?: string
+  eol?: string
+  editing?: boolean
+  dirty?: boolean
+  busy?: boolean
+  confirmBack?: boolean
+  error?: string
+  editorInstance?: string
+  editorSeq?: number
+  editorRefresh?: number
+  editorCursor?: number
+  editorRow?: number
+  editorCol?: number
+  editorSelected?: number
+  editorWin?: number
+  editorLine?: number
+  editorTotal?: number
+  editorWrap?: boolean
 }
 export type Tree = {
   root: string
@@ -18,6 +41,9 @@ export type Tree = {
   reveal: { dir: string; n: number }
   pin: string
   tick: number
+  menu?: string
+  menuMode?: 'rename' | 'delete' | 'newfile' | 'newfolder'
+  menuText?: string
   preview?: Preview
 }
 
