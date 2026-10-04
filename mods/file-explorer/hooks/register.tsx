@@ -913,10 +913,10 @@ export const register: Register = on => {
         const lines = edit ? 1 : mode === 'delete' ? 3 : groups.flat().length + groups.length - 1
         const cells = (rows: number) => Math.round((rows * T.rowH) / T.cellPx)
         const { offset = 0, bodyRows = 30 } = (e.props as any).scroll ?? {}
-        const top = 4 + cells(idx + 1) - offset + lines + 2 > bodyRows ? Math.max(0, cells(idx) - lines - 2) : cells(idx + 1)
-        const left = Math.max(0, ((e as any).bodyColumns ?? 60) - MENU_W - 2)
+        // Beside its row, ending just left of the "…" (right cap cell + 2 trigger cells); flipped up near the bottom.
+        const top = 4 + cells(idx) - offset + lines + 2 > bodyRows ? Math.max(0, cells(idx + 1) - lines - 2) : cells(idx)
         return (
-          <Box key="menu-panel" position="absolute" top={top} left={left} width={MENU_W} flexDirection="column" backgroundColor={T.menuBg} borderStyle="round" borderColor={T.menuBorder} paddingX={1}>
+          <Box key="menu-panel" position="absolute" top={top} right={3} width={MENU_W} flexDirection="column" backgroundColor={T.menuBg} borderStyle="round" borderColor={T.menuBorder} paddingX={1}>
             {edit && (
               <Input key="menu-input" label={mode === 'newfile' ? 'New file ' : mode === 'newfolder' ? 'New folder ' : ''} value={t.menuText ?? ''} onInput={(v: string) => update($, tree, (cur: Tree) => ({ ...cur, menuText: v }))}
                 onSubmit={async (v: string) => {

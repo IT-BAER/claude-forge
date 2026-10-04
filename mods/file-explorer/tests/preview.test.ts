@@ -396,11 +396,12 @@ test('the "…" button on a folder offers New file and New folder inside it, and
   await f.ui.unmount()
 })
 
-test('the menu is a styled popup below its row, drawn after every row so nothing paints over it', async ($, on) => {
+test('the menu is a styled popup beside its row, ending just left of the "…", drawn after every row so nothing paints over it', async ($, on) => {
   const f = await menuFixture($, on)
   await openMenu(f.ui, 'hello.ts')
   const panel: any = await f.ui.find({ key: 'menu-panel' })
-  expect(panel.props).toMatchObject({ position: 'absolute', top: 2 })
+  expect(panel.props).toMatchObject({ position: 'absolute', top: 1, right: 3 })
+  expect(panel.props.left).toBeUndefined()
   expect(panel.props.backgroundColor).toBeTruthy()
   expect(panel.props.borderStyle).toBeTruthy()
   const order = (await f.ui.findAll({})).map((n: any) => n.key)
@@ -464,6 +465,21 @@ test('a menu opened while the pane never had the keyboard still shows', async ($
   await f.ui.unmount()
 })
 
+test('every dot of the "…" opens the menu, also a release in the pixels right of the last whole cell', async ($, on) => {
+  const f = await menuFixture($, on)
+  const inRow = 'n:C:/project/hello.ts'
+  await f.ui.resize({ in: inRow, columns: 40, rows: 1 })
+  for (const x of [38, 39, 40]) {
+    await f.ui.pointer({ in: inRow, type: 'down', x, y: 0, button: 'left' })
+    await f.ui.pointer({ in: inRow, type: 'up', x, y: 0, button: 'left' })
+    await f.ui.redraw()
+    expect(await f.ui.find({ key: 'menu-panel' })).toBeDefined()
+    await openMenu(f.ui, 'hello.ts')
+    expect(await f.ui.find({ key: 'menu-panel' })).toBeUndefined()
+  }
+  await f.ui.unmount()
+})
+
 test('popup items are full-width pointer regions, so hover and click cover the whole row', async ($, on) => {
   const f = await menuFixture($, on)
   await openMenu(f.ui, 'hello.ts')
@@ -477,7 +493,7 @@ test('popup top converts rows (theme rowH) to cells (theme cellPx), not row inde
   await f.ui.redraw()
   await openMenu(f.ui, 'hello.ts')
   const panel: any = await f.ui.find({ key: 'menu-panel' })
-  expect(panel.props.top).toBe(4)
+  expect(panel.props.top).toBe(2)
   await f.ui.unmount()
 })
 

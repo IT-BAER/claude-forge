@@ -22,7 +22,9 @@ const FileName: ClientModule<Props, State> = (props, surface) => {
   if (!surface.state) surface.setState(state)
   const reset = () => { state.cancel?.(); state.cancel = undefined; state.armed = false }
   if (props.ack?.instance === state.instance) state.pending = state.pending.filter(click => click.seq > props.ack!.seq)
-  surface.onPointer(e => {
+  surface.onPointer(ev => {
+    // columns is floor(width / cell): the pixels right of the last whole cell report x === columns.
+    const e = { ...ev, x: Math.min(ev.x, surface.columns - 1) }
     if (e.type === 'leave') {
       state.down = undefined
       reset()
