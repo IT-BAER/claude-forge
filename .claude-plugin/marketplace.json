@@ -1,12 +1,19 @@
 {
   "name": "claude-forge",
   "description": "Skills and mods for Claude Code",
-  "owner": { "name": "IT-BAER" },
+  "owner": {
+    "name": "IT-BAER"
+  },
   "plugins": [
     {
       "name": "file-explorer",
       "source": "./mods/file-explorer",
       "description": "VS Code style file tree of the session's working directory in a pane"
+    },
+    {
+      "name": "cache-status",
+      "source": "./mods/cache-status",
+      "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board and /handoff. Fork of Cache Keeper by Nate Herk."
     }
   ]
 }
