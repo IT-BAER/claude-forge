@@ -8,7 +8,7 @@ A mod adds a pane, a band or a command to Claude Code itself.
 
 | Mod | What it does |
 | --- | --- |
-| [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. |
+| [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
 
 ## Skills
 
@@ -42,10 +42,11 @@ Terminal form: `claude plugin install file-explorer@claude-forge`. Start a new s
 
 ### Without the marketplace
 
-Copy the folder into your skills folder. Claude Code loads it at the next session start. This works for mods and for skills.
+Copy the folder into your skills folder. Claude Code loads it at the next session start. This works for mods and for skills. A mod can have its own limits, for example `file-explorer` runs on Windows only.
 
 ```bash
 git clone https://github.com/IT-BAER/claude-forge.git
+rm -rf ~/.claude/skills/file-explorer
 cp -r claude-forge/mods/file-explorer ~/.claude/skills/file-explorer
 ```
 
@@ -53,6 +54,7 @@ PowerShell:
 
 ```powershell
 git clone https://github.com/IT-BAER/claude-forge.git
+Remove-Item "$HOME\.claude\skills\file-explorer" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item claude-forge\mods\file-explorer "$HOME\.claude\skills\file-explorer" -Recurse
 ```
 
@@ -65,7 +67,7 @@ claude plugin update file-explorer@claude-forge
 claude plugin uninstall file-explorer@claude-forge
 ```
 
-For a copied folder, pull the repository and copy again, or delete the folder in `~/.claude/skills/`.
+The marketplace plugin has no pinned version, so every new commit in this repository counts as an update. For a copied folder, pull the repository and run the `rm` and `cp` lines again, or delete the folder in `~/.claude/skills/`.
 
 ## Layout
 

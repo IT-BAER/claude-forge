@@ -30,6 +30,7 @@ claude plugin install file-explorer@claude-forge
 
 ```bash
 git clone https://github.com/IT-BAER/claude-forge.git
+rm -rf ~/.claude/skills/file-explorer
 cp -r claude-forge/mods/file-explorer ~/.claude/skills/file-explorer
 ```
 
@@ -37,10 +38,11 @@ PowerShell:
 
 ```powershell
 git clone https://github.com/IT-BAER/claude-forge.git
+Remove-Item "$HOME\.claude\skills\file-explorer" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item claude-forge\mods\file-explorer "$HOME\.claude\skills\file-explorer" -Recurse
 ```
 
-Claude Code loads any plugin folder inside `~/.claude/skills/` at the next session start.
+Claude Code loads any plugin folder inside `~/.claude/skills/` at the next session start. The first command line removes an older copy, so run the pair again to update. Without it, a second copy ends up inside the first.
 
 ### 3. Try it for one session
 

@@ -1,6 +1,8 @@
 {
   "name": "file-explorer",
-  "version": "0.2.1",
   "description": "VS Code style file tree of the session's working directory in a pane",
+  "author": {
+    "name": "IT-BAER"
+  },
   "types": "./types/index.d.ts"
 }
