@@ -2,7 +2,7 @@
 
 A VS Code style file explorer for Claude Code. It opens a pane with the file tree of your session's working directory, previews files, and lets you edit and save them without leaving the session.
 
-<img src="screenshots/tree.png" alt="File tree of a project folder" width="330">
+<img src="screenshots/file-tree.png" alt="File tree of a project folder" width="330">
 
 *The pane on a project folder. Folders come first, ignored entries such as `node_modules` are dimmed, and the search box, refresh and collapse buttons sit at the top.*
 
@@ -88,7 +88,7 @@ Type `/files` to open the pane. Type it again to close it.
 
 ### Editor
 
-<img src="screenshots/editor.png" alt="Editor with syntax colours" width="560">
+<img src="screenshots/file-editor.png" alt="Editor with syntax colours" width="560">
 
 *Editing `CHANGELOG.md`. The status line shows the caret position, encoding and line ending. Headings, links and inline code have their own colours, and wrapped list lines keep an indent guide.*
 
