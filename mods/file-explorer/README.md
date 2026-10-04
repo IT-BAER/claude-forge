@@ -2,9 +2,9 @@
 
 A VS Code style file explorer for Claude Code. It opens a pane with the file tree of your session's working directory, previews files, and lets you edit and save them without leaving the session.
 
-![File tree with git status](screenshots/tree.png)
+<img src="screenshots/tree.png" alt="File tree of a project folder" width="330">
 
-<!-- The PNGs in screenshots/ are placeholders. Replace them with real screenshots and keep the file names. -->
+*The pane on a project folder. Folders come first, ignored entries such as `node_modules` are dimmed, and the search box, refresh and collapse buttons sit at the top.*
 
 ## Install
 
@@ -70,17 +70,17 @@ Type `/files` to open the pane. Type it again to close it.
 
 ### File tree
 
-![Search across subfolders](screenshots/search.png)
-
 - Folders open and close with a click. Git status shows as a coloured letter: M modified, U untracked, A added, R renamed, D deleted. Ignored files are dimmed.
 - The search box matches file and folder names in all subfolders, also collapsed ones. Each result shows its parent folder. It skips `.git` and `node_modules` and stops at 20,000 entries.
 - Hover the icons at the top right: refresh the tree, or collapse all folders.
 - Click a file to select it. Double-click opens the preview. Ctrl+click adds an `@path` mention to your prompt.
 - Click the … at the end of a row for a popup menu (a click outside the pane hides it): Open, Add to prompt, Rename, Duplicate, Delete (to the Recycle Bin, after a confirm), Copy path, Copy relative path, Reveal in File Explorer. Folders also offer New file and New folder.
 
-### Preview
+<img src="screenshots/context-menu.png" alt="Row menu" width="260">
 
-![Markdown and image preview](screenshots/preview.png)
+*The … menu of a row. Open and Add to prompt come first, then Rename, Duplicate and Delete, then the copy and reveal actions.*
+
+### Preview
 
 - Markdown files render with headings, tables, links and code blocks. A Source button shows the raw text with syntax colours.
 - PNG, JPG, GIF and BMP images (up to 20 MiB) are scaled to fit the pane.
@@ -88,7 +88,9 @@ Type `/files` to open the pane. Type it again to close it.
 
 ### Editor
 
-![Editor with syntax colours](screenshots/editor.png)
+<img src="screenshots/editor.png" alt="Editor with syntax colours" width="560">
+
+*Editing `CHANGELOG.md`. The status line shows the caret position, encoding and line ending. Headings, links and inline code have their own colours, and wrapped list lines keep an indent guide.*
 
 Press Edit in the preview. Changes stay a draft until you press Save or Ctrl+S. Back asks before it discards a draft. If the file changed on disk in the meantime, the save is refused and your draft stays.
 
@@ -112,8 +114,6 @@ Press Edit in the preview. Changes stay a draft until you press Save or Ctrl+S. 
 | Double-click, triple-click | Select a word, a line |
 
 ### Find and replace
-
-![Find and replace](screenshots/find-replace.png)
 
 Ctrl+F finds as you type and marks every match. Ctrl+H adds a replace field. The bar shows in the status line under the prompt.
 
