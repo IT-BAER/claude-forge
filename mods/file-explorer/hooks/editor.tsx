@@ -3,12 +3,13 @@ import type { ClientModule } from 'claude-code'
 export type EditorProps = {
   request: number; text: string; instance: string; seq: number; refresh: number; cursor: number;
   busy: boolean; rows: number; ext: string; fit: number; win: number; wrap: boolean; top: number; span: number
+  mono?: boolean
 }
 type Snapshot = { text: string; cursor: number; anchor: number }
 type Find = { mode: 0 | 1 | 2; q: string; r: string; field: 0 | 1 }
 type State = Snapshot & {
   request: number; instance: string; seq: number; refresh: number; limit: number; find: Find; findView: string;
-  left: number; py: number; view?: string; win: number; winProp: number; seen: number; undo: Snapshot[]; redo: Snapshot[]; drag: boolean; locked: number
+  left: number; py: number; view?: string; geo?: string; win: number; winProp: number; seen: number; undo: Snapshot[]; redo: Snapshot[]; drag: boolean; locked: number
   clicks: { t: number; x: number; y: number; n: number } | null; unit: 'char' | 'word' | 'line'; base: [number, number]
   edit: { kind: string; t: number; at: number } | null
 }
@@ -26,9 +27,9 @@ function commentMarks(ext: string): [string, string] {
 }
 
 const WINDOW = 120, BUDGET = 70000
-const PLAIN = 0, KW = 1, CTL = 2, STR = 3, COM = 4, NUM = 5, TYPE = 6, FN = 7, PROP = 8, HEAD = 9, CODE = 10
+export const PLAIN = 0, KW = 1, CTL = 2, STR = 3, COM = 4, NUM = 5, TYPE = 6, FN = 7, PROP = 8, HEAD = 9, CODE = 10
 const FAINT = '#4b5260', MATCH = '#3a3f4b', FOUND = '#515c6a'
-const COLORS: (string | undefined)[] =[undefined, '#569cd6', '#c586c0', '#ce9178', '#6a9955', '#b5cea8', '#4ec9b0', '#dcdcaa', '#9cdcfe', '#569cd6', '#ce9178']
+export const COLORS: (string | undefined)[] =[undefined, '#569cd6', '#c586c0', '#ce9178', '#6a9955', '#b5cea8', '#4ec9b0', '#dcdcaa', '#9cdcfe', '#569cd6', '#ce9178']
 
 type Lang = {
   line?: string[]; block?: [string, string][]; quotes?: string; triple?: boolean
@@ -218,7 +219,7 @@ function markdownScan(text: string, kinds: Uint8Array) {
 }
 
 let memo: { text: string; ext: string; kinds: Uint8Array } | undefined
-function highlight(text: string, ext: string): Uint8Array | undefined {
+export function highlight(text: string, ext: string): Uint8Array | undefined {
   const lang = LANGS.get(ext)
   if (!lang) return undefined
   if (memo && memo.text === text && memo.ext === ext) return memo.kinds
@@ -284,7 +285,7 @@ const lineStart = (text: string, at: number) => at <= 0 ? 0 : text.lastIndexOf('
 // One entry per drawn row. `limit` 0 means one row per line; otherwise rows break after the last space, else hard-cut.
 type VRow = { start: number; end: number; line: number; first: boolean; last: boolean }
 let layoutMemo: { text: string; limit: number; rows: VRow[] } | undefined
-function layout(text: string, limit: number): VRow[] {
+export function layout(text: string, limit: number): VRow[] {
   if (layoutMemo && layoutMemo.text === text && layoutMemo.limit === limit) return layoutMemo.rows
   const rows: VRow[] = []
   let start = 0
@@ -594,7 +595,8 @@ const Editor: ClientModule<EditorProps, State> = (props, surface) => {
     move(offset(p.row + Math.sign(gap) * Math.min(8, 1 + (Math.abs(gap) >> 2)), p.col), true)
   })
   const span = (at: number): [number, number] => s.unit === 'word' ? wordRange(s.text, at) : s.unit === 'line' ? lineRange(s.text, at) : [at, at]
-  const place = (e: { x: number; y: number }) => offset(e.y, s.left + Math.max(0, e.x - gutter))
+  // The pointer column counts cells; the desktop draws props.fit characters per cell. The caret goes before the character under the cell centre.
+  const place = (e: { x: number; y: number }) => offset(e.y, s.left + Math.max(0, Math.round((e.x - gutter + 0.5) * props.fit - 0.5)))
   surface.onPointer(e => {
     if (e.type === 'down' && e.button === 'left') {
       const at = place(e)
@@ -634,10 +636,10 @@ const Editor: ClientModule<EditorProps, State> = (props, surface) => {
   const logicalCol = s.cursor - lineStart(s.text, s.cursor)
   const kinds = highlight(s.text, props.ext)
   const total = vrows.length
-  const view = `${caret.row}:${caretLine}:${logicalCol}:${end - start}:${total}`
+  const view = `${caret.row}:${caretLine}:${logicalCol}:${s.cursor}:${s.anchor}:${total}`
   if (s.view !== view) {
     s.view = view
-    surface.post({ view: { request: s.request, row: caret.row, line: caretLine, col: logicalCol, selected: end - start, total } })
+    surface.post({ view: { request: s.request, row: caret.row, line: caretLine, col: logicalCol, selected: end - start, total, cursor: s.cursor, anchor: s.anchor } })
   }
   if (s.limit !== limit) { s.limit = limit; s.seen = -1 }
   if (props.win !== s.winProp) { s.winProp = props.win; s.win = props.win }
@@ -684,6 +686,26 @@ const Editor: ClientModule<EditorProps, State> = (props, surface) => {
         if (last && last.cursor === cursor && last.selected === selected && last.kind === kind && last.tone === tone && last.match === match && last.found === found) last.text += text
         else spans.push({ text, cursor, selected, kind, tone, match, found })
       }
+      if (props.mono) {
+        // The pane draws this row's text, caret and selection as SVG under the Client; here only find and bracket marks.
+        const marks: { left: number; width: number; color: string }[] = []
+        let x = 0
+        for (const span of spans) {
+          const n = [...span.text].length
+          const color = span.found ? '#515c6aaa' : span.match ? '#3a3f4baa' : ''
+          const last = marks[marks.length - 1]
+          if (color && last?.color === color && last.left + last.width === x) last.width += n
+          else if (color) marks.push({ left: x, width: n, color })
+          x += n
+        }
+        size += 200 + marks.length * 120
+        return <Box key={`line:${row}`} flexShrink={0} height={1} overflow="hidden" flexDirection="row">
+          <Box width={gutter} flexShrink={0}><Text dimColor>{r.first ? `${String(r.line + 1).padStart(gutter - 1)} ` : ' '.repeat(gutter)}</Text></Box>
+          <Box key={`code:${row}`} flexGrow={1} height={1} overflow="hidden" position="relative">
+            {marks.map((m, n) => <Box key={`mark:${n}`} position="absolute" top={0} left={m.left} width={m.width} height={1} backgroundColor={m.color} />)}
+          </Box>
+        </Box>
+      }
       size += 260 + spans.reduce((n, span) => n + span.text.length + 80, 0)
       return <Box key={`line:${row}`} flexShrink={0} height={1} overflow="hidden" flexDirection="row" backgroundColor={r.line === caretLine ? '#151b23' : undefined}>
         <Box width={gutter}><Text dimColor>{r.first ? `${String(r.line + 1).padStart(gutter - 1)} ` : ' '.repeat(gutter)}</Text></Box>
@@ -693,7 +715,10 @@ const Editor: ClientModule<EditorProps, State> = (props, surface) => {
   const rows: unknown[] = []
   let to = s.win
   while (to < Math.min(total, s.win + WINDOW) && size < BUDGET) rows.push(draw(to++))
-  return <Box flexDirection="column">
+  const geo = `${surface.columns}:${s.left}:${limit}`
+  if (props.mono && s.geo !== geo) { s.geo = geo; surface.post({ geo: { request: s.request, columns: surface.columns || 70, left: s.left, limit } }) }
+  // A see-through root still takes the pointer only with a background.
+  return <Box flexDirection="column" position="relative" backgroundColor={props.mono ? '#00000001' : undefined}>
     {s.win > 0 ? <Box key="pad-top" height={s.win} flexShrink={0} /> : ''}
     {rows}
     {to < total ? <Box key="pad-bottom" height={total - to} flexShrink={0} /> : ''}

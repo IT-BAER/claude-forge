@@ -29,6 +29,8 @@ export type Preview = {
   editorWin?: number
   editorLine?: number
   editorTotal?: number
+  editorCaret?: number
+  editorAnchor?: number
   editorWrap?: boolean
 }
 export type Tree = {

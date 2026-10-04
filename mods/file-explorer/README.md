@@ -97,6 +97,7 @@ Type `/files` to open the pane. Type it again to close it.
 
 Press Edit in the preview. Changes stay a draft until you press Save or Ctrl+S. Back asks before it discards a draft. If the file changed on disk in the meantime, the save is refused and your draft stays.
 
+- In Claude Desktop the editor draws text in a monospace font on the pane's cell grid, so a click puts the caret exactly on the letter you clicked.
 - Encoding (UTF-8, UTF-8 with BOM, UTF-16) and line endings are kept as they were.
 - Syntax colours for TypeScript, JavaScript, C-like languages, Python, PowerShell, shell, JSON, YAML, TOML, SQL, CSS, HTML and Markdown (with fenced code in its own language).
 - Soft wrap is on for Markdown and text files, off for code. The Wrap button switches it.
@@ -133,6 +134,8 @@ Matching ignores case.
 ## Settings
 
 None are needed. An optional `theme.json` next to `.claude-plugin/` tunes the look, for example `{ "radius": 4, "bgHover": "#262729", "bgPicked": "#343638", "rowH": 26.5, "searchCells": 22 }`. The pane picks up changes within a few seconds.
+
+Editor keys: `cellW` is the CSS width of one cell (default 7.92, measured on Claude Desktop at default zoom), `codeFont` the font size, `codeBase` the text baseline. `"editorMono": false` falls back to the proportional font, where clicks are less exact.
 
 ## Limits
 

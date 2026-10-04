@@ -3,6 +3,7 @@ import type { Register } from 'claude-code'
 
 import type { Entry, Preview, Tree } from '../types'
 import { editorProps, markdownChunks, sourceChunks } from './editing'
+import { COLORS, HEAD, highlight, layout } from './editor'
 
 const cleanError = (error: unknown) => String((error as Error)?.message ?? error).replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').slice(0, 1000)
 async function requestBack($: any, discard = false): Promise<boolean> {
@@ -52,13 +53,22 @@ async function savePreview($: any, request: number, goBack = false) {
 
 async function editorMessage($: any, e: any) {
   const data = e.data
+  if (data?.geo) {
+    const g = data.geo
+    if ([g.request, g.columns, g.left, g.limit].every(Number.isSafeInteger) && g.columns >= 8 && g.columns <= 1000 && g.left >= 0 && g.limit >= 0) {
+      const prior = editorGeo.get(g.request)
+      if (!prior || prior.columns !== g.columns || prior.left !== g.left || prior.limit !== g.limit) { editorGeo.set(g.request, g); $.ui.invalidate('ui.render') }
+    }
+    return {}
+  }
   if (data?.view) {
     const v = data.view
     if (![v.request, v.row, v.line, v.col, v.selected, v.total].every(Number.isSafeInteger) || v.row < 0 || v.line < 0 || v.col < 0 || v.selected < 0 || v.total < 1) return {}
     await update($, tree, (cur: Tree) => {
       const p = cur.preview
       if (!p?.editing || p.request !== v.request) return cur
-      return { ...cur, preview: { ...p, editorRow: v.row, editorLine: v.line, editorCol: v.col, editorSelected: v.selected, editorTotal: v.total } }
+      return { ...cur, preview: { ...p, editorRow: v.row, editorLine: v.line, editorCol: v.col, editorSelected: v.selected, editorTotal: v.total,
+        ...(Number.isSafeInteger(v.cursor) && Number.isSafeInteger(v.anchor) && v.cursor >= 0 && v.anchor >= 0 ? { editorCaret: v.cursor, editorAnchor: v.anchor } : {}) } }
     })
     $.clock.after(80, () => $.ui.scroll({ to: { key: 'editor-caret' }, in: PANE }).catch(() => {}))
     return {}
@@ -125,11 +135,45 @@ let lastFileClick: { path: string; root: string } | undefined
 let selectionActive = false
 let findShown = false
 // Last pane geometry seen, so the editor's props agree between a pane render and an editor message reply.
-const paneView = { offset: 0, body: 35, content: 0, fit: 1 }
+const xmlText = (value: string) => value.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;')
+// One editor row as an SVG: every character sits at its own cell, so pointer cell N is character N whatever the font.
+function rowSvg(text: string, kinds: Uint8Array | undefined, from: number, left: number, cells: number, sel?: [number, number], caret?: number): string {
+  const w = cells * T.cellW
+  const h = T.cellPx
+  const runs: string[] = []
+  if (sel && sel[1] > from + left && sel[0] < text.length + 1) {
+    const a = Math.max(0, sel[0] - from - left), b = Math.min(cells, sel[1] - from - left)
+    if (b > a) runs.push(`<rect x="${+(a * T.cellW).toFixed(2)}" y="0" width="${+((b - a) * T.cellW).toFixed(2)}" height="${h}" fill="#264f78"/>`)
+  }
+  let x: number[] = []
+  let chars = ''
+  let color = ''
+  let bold = false
+  const flush = () => {
+    if (chars) runs.push(`<text x="${x.map(v => +v.toFixed(2)).join(' ')}" fill="${color}"${bold ? ' font-weight="700"' : ''}>${xmlText(chars)}</text>`)
+    x = []; chars = ''
+  }
+  const line = text.slice(from + left, from + left + cells)
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i] === '\t' ? ' ' : line[i]!
+    if (c === ' ') continue
+    const kind = kinds?.[from + left + i] ?? 0
+    const nextColor = COLORS[kind] ?? '#d4d4d4'
+    const nextBold = kind === HEAD
+    if (nextColor !== color || nextBold !== bold) { flush(); color = nextColor; bold = nextBold }
+    x.push(i * T.cellW)
+    chars += c
+  }
+  flush()
+  if (caret !== undefined && caret >= from + left && caret - from - left <= cells) runs.push(`<rect x="${+((caret - from - left) * T.cellW).toFixed(2)}" y="1" width="1.6" height="${h - 2}" fill="#aeafad"/>`)
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><g font-family="Cascadia Mono,Consolas,ui-monospace,monospace" font-size="${T.codeFont}">${runs.join('').replace(/<text /g, `<text y="${(h * T.codeBase).toFixed(2)}" `)}</g></svg>`
+}
+const editorGeo = new Map<number, { columns: number; left: number; limit: number }>()
+const paneView = { offset: 0, body: 35, content: 0, fit: 1, mono: false }
 const editorFor = (p: Preview, rows: number) => {
   const total = p.editorTotal ?? p.draft?.split('\n').length ?? 0
   const top = Math.max(0, paneView.offset - Math.max(0, paneView.content - total - 2))
-  return editorProps(p, rows, paneView.fit, top, Math.max(8, paneView.body))
+  return { ...editorProps(p, rows, paneView.fit, top, Math.max(8, paneView.body)), mono: paneView.mono }
 }
 const EDITOR_WINDOW = 120
 const ENCODINGS: Record<string, string> = { utf8: 'UTF-8', utf8bom: 'UTF-8 BOM', utf16le: 'UTF-16 LE', utf16be: 'UTF-16 BE' }
@@ -176,6 +220,14 @@ const T = {
   rowH: 23,
   // CSS px of one character cell vertically; converts rowH into the cell offsets Box top and bottom take.
   cellPx: 19.2,
+  // Editor text characters per pointer cell on the desktop (measured: cell 60 past the gutter lands on character 79-80).
+  textFit: 4 / 3,
+  // Desktop editor rows drawn with Code (code font, one character per cell); false falls back to Text and textFit.
+  editorMono: true,
+  // CSS px of one pointer cell across (measured: 9.9 device px at 125 %), the monospace font size and its baseline in the row.
+  cellW: 7.92,
+  codeFont: 13,
+  codeBase: 0.74,
   radius: 4,
   bgHover: '#161b22',
   bgPicked: '#09182e',
@@ -446,27 +498,14 @@ async function load($: any, dir: string) {
 }
 
 // Maps normalized absolute path to a status letter; folders carry their strongest child status.
-async function dbg($: any, msg: string) {
-  try {
-    await $.fs.write(`${$.plugin.root}/debug.log`, msg)
-  } catch {
-    // debug only
-  }
-}
 
 async function gitStatus($: any, root: string): Promise<Record<string, string>> {
   try {
     const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root })
-    if (top.exitCode !== 0) {
-      await dbg($, `rev-parse exit ${top.exitCode} cwd=${root} stderr=${top.stderr}`)
-      return {}
-    }
+    if (top.exitCode !== 0) return {}
     const base = norm(top.stdout.trim())
     const st = await $.process.run(['git', 'status', '--porcelain=v1', '-z', '--ignored'], { cwd: root })
-    if (st.exitCode !== 0) {
-      await dbg($, `status exit ${st.exitCode} stderr=${st.stderr}`)
-      return {}
-    }
+    if (st.exitCode !== 0) return {}
     const out: Record<string, string> = {}
     const put = (key: string, letter: string) => {
       if (letter === 'I') {
@@ -503,10 +542,8 @@ async function gitStatus($: any, root: string): Promise<Record<string, string>> 
         if (key.length > base.length) put(key, letter)
       }
     }
-    await dbg($, `git ok base=${base} entries=${Object.keys(out).length} sample=${Object.entries(out).slice(0, 5).join(';')}`)
     return out
-  } catch (err) {
-    await dbg($, `git threw: ${String((err as Error)?.message ?? err)}`)
+  } catch {
     return {}
   }
 }
@@ -821,7 +858,7 @@ export const register: Register = on => {
       // No blur event: the pane losing the keyboard (a click outside) hides the open menu. Drawing only, no state write.
       if (paneFocused && !e.props.isFocused && t.menu) blurredMenu = t.menu
       paneFocused = e.props.isFocused
-      paneView.offset = e.props.scroll.offset; paneView.body = e.props.scroll.bodyRows; paneView.fit = e.surface === 'desktop' ? 1.15 : 1
+      paneView.offset = e.props.scroll.offset; paneView.body = e.props.scroll.bodyRows; paneView.mono = e.surface === 'desktop' && !!T.editorMono; paneView.fit = e.surface === 'desktop' && !paneView.mono ? T.textFit : 1
       if (findShown && !t.preview?.editing) { findShown = false; $.ui.status(undefined) }
       if (t.preview) {
         const p = t.preview
@@ -857,10 +894,38 @@ export const register: Register = on => {
               : p.kind === 'image' ? <Text dimColor>Image preview is available in Claude Desktop.</Text>
               : p.kind === 'text' && p.editing ? <Box flexDirection="column">
                 <Text dimColor>{`Ln ${(p.editorLine ?? 0) + 1}, Col ${(p.editorCol ?? 0) + 1}${p.editorSelected ? ` (${p.editorSelected} selected)` : ''} · ${ENCODINGS[p.encoding ?? ''] ?? p.encoding ?? ''} · ${(p.eol ?? 'lf').toUpperCase()} · Ctrl+S Save · Ctrl+Z Undo · Ctrl+Y Redo · Ctrl+V Paste`}</Text>
-                <Box flexDirection="column" position="relative">
-                <Box key="editor-caret" position="absolute" top={p.editorRow ?? 0} height={1} width={1} />
-                <Client key="file-editor" module="./editor.tsx" width="100%" props={editorFor(p, Math.max(8, Math.min(40, e.props.scroll.bodyRows - 8)))} />
-                </Box>
+                {(() => {
+                  const props = editorFor(p, Math.max(8, Math.min(40, e.props.scroll.bodyRows - 8)))
+                  const client = <Client key="file-editor" module="./editor.tsx" width="100%" props={props} />
+                  const geo = props.mono && Svg ? editorGeo.get(p.request) : undefined
+                  if (!geo) return <Box flexDirection="column" position="relative">
+                    <Box key="editor-caret" position="absolute" top={p.editorRow ?? 0} height={1} width={1} />
+                    {client}
+                  </Box>
+                  // Monospace mode: the text is Code rows here, the Client lies on top for keys, pointer, caret and highlights.
+                  const text = props.text
+                  const gutter = Math.max(4, String(text.split('\n').length).length + 2)
+                  const cells = Math.max(8, geo.columns - gutter)
+                  const vrows = layout(text, geo.limit)
+                  const from = Math.max(0, props.top - 20)
+                  const to = Math.min(vrows.length, props.top + props.span + 20)
+                  const caretLine = vrows[Math.min(vrows.length - 1, p.editorRow ?? 0)]?.line
+                  const kinds = highlight(text, props.ext)
+                  const sel: [number, number] | undefined = p.editorCaret !== undefined && p.editorAnchor !== undefined && p.editorCaret !== p.editorAnchor
+                    ? [Math.min(p.editorCaret, p.editorAnchor), Math.max(p.editorCaret, p.editorAnchor)] : undefined
+                  return <Box flexDirection="column" position="relative" height={vrows.length}>
+                    {from > 0 && <Box key="code-top" height={from} flexShrink={0} />}
+                    {vrows.slice(from, to).map((r, i) => {
+                      const end = text[r.end - 1] === '\n' ? r.end - 1 : r.end
+                      return <Box key={`code-row:${from + i}`} height={1} flexShrink={0} overflow="hidden" flexDirection="row" backgroundColor={r.line === caretLine ? '#151b23' : undefined}>
+                        <Box width={gutter} flexShrink={0} />
+                        <Box flexGrow={1} height={1} overflow="hidden">{Svg && (text.slice(r.start, end).trim() || from + i === p.editorRow || sel) ? <Svg source={rowSvg(text.slice(0, end), kinds, r.start, geo.left, cells, sel, from + i === p.editorRow ? p.editorCaret : undefined)} alt="editor row" width={Math.round(cells * T.cellW)} height={T.cellPx} /> : null}</Box>
+                      </Box>
+                    })}
+                    <Box key="editor-caret" position="absolute" top={p.editorRow ?? 0} height={1} width={1} />
+                    <Box position="absolute" top={0} left={0} width="100%" height={vrows.length}>{client}</Box>
+                  </Box>
+                })()}
               </Box>
               : p.kind === 'text' ? (p.content ? (p.markdown && p.rendered ? <Box flexDirection="column">{markdownChunks(p.content).map((part, index) => <Box key={`markdown:${index}`}>{part.code ? <Code source={part.text} language={part.code} /> : <Markdown text={part.text} />}</Box>)}</Box> : <Box flexDirection="column">{sourceChunks(p.content).map((part, index) => <Box key={`source:${index}`}><Code source={part.text} path={p.path} startLine={part.line} /></Box>)}</Box>) : <Text dimColor>Empty file.</Text>)
               : <Text color={p.kind === 'error' ? 'red' : undefined}>{p.content}</Text>}

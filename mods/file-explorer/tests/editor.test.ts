@@ -4,7 +4,8 @@ const pane = { plugin: 'file-explorer', component: 'Pane', requestId: 'file-expl
   viewport: { columns: 100, rows: 40 }, props: { title: 'Files', isFocused: true, bodyColumns: 70,
     placement: 'dock', scroll: { offset: 0, bodyRows: 35 }, view: {} } } as const
 
-async function setup($: any, on: any, name = 'notes.md', initial = '# Original\n', conflict = false) {
+// The older geometry tests were written for 1.15 characters per cell; the measured default is 4/3.
+async function setup($: any, on: any, name = 'notes.md', initial = '# Original\n', conflict = false, theme = '{"textFit":1.15,"editorMono":false}') {
   let value: any = { root: 'C:/project', dirs: { 'C:/project': [{ name, kind: 'file' }] }, open: [], filter: '', picked: '', git: {}, reveal: { dir: '', n: 0 }, pin: '', tick: 0 }
   let version = 0
   let disk = initial
@@ -13,7 +14,7 @@ async function setup($: any, on: any, name = 'notes.md', initial = '# Original\n
   let status = ''
   on('state.get', () => ({ value: { value, version } }))
   on('state.set', (_: any, e: any) => { value = e.value; return { value: { isSet: true, version: ++version } } })
-  on('fs.read', () => ({ value: '{}' }))
+  on('fs.read', () => ({ value: theme }))
   on('fs.write', () => ({ value: undefined }))
   on('fs.stat', (_: any, e: any) => ({ value: { kind: e.path.replace(/\\/g, '/') === 'C:/project' ? 'dir' : 'file', size: disk.length, realPath: e.path, isLink: false, mtimeMs: 1 } }))
   on('ui.invalidate', () => ({ value: undefined }))
@@ -211,8 +212,8 @@ test('Edit displays several document lines together in the available pane', asyn
   expect(await f.ui.find({ in: 'file-editor', type: 'Text', text: 'Fourth line' })).toBeDefined()
 })
 
-async function editing($: any, on: any, text: string, name = 'code.ts') {
-  const f = await setup($, on, name, text)
+async function editing($: any, on: any, text: string, name = 'code.ts', theme?: string) {
+  const f = await setup($, on, name, text, false, theme)
   await f.ui.press({ key: 'preview-edit' })
   await f.ui.redraw()
   return f
@@ -240,7 +241,7 @@ test('double-click selects the word under the pointer, triple-click selects the 
   expect(await selection(f)).toBe('world')
   await click(f, 11, 0, 2)
   expect(await selection(f)).toBe(';')
-  await click(f, 5, 0, 2)
+  await click(f, 4, 0, 2)
   expect(await selection(f)).toBe(' ')
   await click(f, 3, 0, 3)
   expect(await selection(f)).toBe('hello world;\n')
@@ -248,7 +249,7 @@ test('double-click selects the word under the pointer, triple-click selects the 
 
 test('a single click only places the caret', async ($, on) => {
   const f = await editing($, on, 'hello world')
-  await click(f, 7, 0, 1)
+  await click(f, 6, 0, 1)
   expect(await selection(f)).toBe('')
   await typeKeys(f, 'X')
   expect(f.state().preview.draft).toBe('hello wXorld')
@@ -615,3 +616,29 @@ test('a drag inside the visible rows does not auto-scroll', async ($, on) => {
   await f.ui.redraw()
   expect((await selection(f)).split('\n').length).toBe(11)
 })
+
+test('a click maps the pointer cell to a character: the desktop draws 4/3 characters per cell', async ($, on) => {
+  // Measured live: 60 cells past the gutter is just after "final-answer ", character 80.
+  const f = await editing($, on, '- The selected Hush output style owns prose, progress updates, and final-answer formatting.\n', 'code.ts', '{"editorMono":false}')
+  await f.ui.pointer({ in: 'file-editor', type: 'down', x: GUTTER + 60, y: 0, button: 'left' })
+  await f.ui.pointer({ in: 'file-editor', type: 'up', x: GUTTER + 60, y: 0, button: 'left' })
+  await f.ui.redraw()
+  await typeKeys(f, 'X')
+  expect(f.state().preview.draft.indexOf('X')).toBe(80)
+})
+
+test('monospace mode: the pane draws rows as per-cell SVG under the Client, and a click lands on exactly the clicked cell', async ($, on) => {
+  const f = await editing($, on, '- The selected Hush output style owns prose, progress updates, and final-answer formatting.\n', 'code.ts', '{}')
+  await f.ui.redraw()
+  expect(await f.ui.find({ type: 'Svg' })).toBeDefined()
+  expect(await f.ui.find({ in: 'file-editor', type: 'Code' })).toBeUndefined()
+  await f.ui.pointer({ in: 'file-editor', type: 'down', x: GUTTER + 60, y: 0, button: 'left' })
+  await f.ui.pointer({ in: 'file-editor', type: 'up', x: GUTTER + 60, y: 0, button: 'left' })
+  await f.ui.redraw()
+  const carets = async () => (await f.ui.findAll({ type: 'Svg' })).filter(s => String(s.props.source).includes('fill="#aeafad"'))
+  expect((await carets()).length).toBe(1)
+  expect(String((await carets())[0]!.props.source)).toContain(`x="${+(60 * 7.92).toFixed(2)}"`)
+  await typeKeys(f, 'X')
+  expect(f.state().preview.draft.indexOf('X')).toBe(60)
+})
+
