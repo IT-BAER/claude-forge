@@ -46,6 +46,7 @@ Copy the folder into your skills folder. Claude Code loads it at the next sessio
 
 ```bash
 git clone https://github.com/IT-BAER/claude-forge.git
+mkdir -p ~/.claude/skills
 rm -rf ~/.claude/skills/file-explorer
 cp -r claude-forge/mods/file-explorer ~/.claude/skills/file-explorer
 ```
