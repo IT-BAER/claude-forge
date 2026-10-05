@@ -45,7 +45,7 @@ const S = {
   rateLimits: [],
 }
 
-const settings = { bigTokens: 150000, guard: true, ttlMin: 0, alerts: true, keepWarmHours: 4 }
+const settings = { bigTokens: 150000, guard: true, ttlMin: 0, alerts: false, keepWarmHours: 4 }
 const names = { cache: 'cache', keepwarm: 'keepwarm', board: 'board', handoff: 'handoff' }
 
 let now = 0
@@ -475,7 +475,7 @@ function statusText() {
   if (S.rateLimits.length) lines.push(`Plan limits used: ${limitsText(S.rateLimits)}.`)
   lines.push(`Session cost so far: ${money(S.costUsd)}. Cold restarts this session: ${S.coldRestarts.length} (${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}).`)
   lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}.`)
-  lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts on|off. Board: /${names.board}.`)
+  lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts [on|off] (no value toggles). Board: /${names.board}.`)
   return lines.join('\n')
 }
 
@@ -495,7 +495,7 @@ export function register(on) {
     S.model = await $.session.model()
     await loadSettings($)
     await readRecording($)
-    names.cache = (await registerCommand($, 'cache', 'Cache Status status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts on|off]')) || names.cache
+    names.cache = (await registerCommand($, 'cache', 'Cache Status status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]]')) || names.cache
     names.keepwarm = (await registerCommand($, 'keepwarm', 'Keep this session\'s prompt cache warm (default 4 hours), or /keepwarm off', '[hours|off]', true)) || names.keepwarm
     names.board = (await registerCommand($, 'board', 'Every local Claude Code session: state, context, cache, cost', '', true)) || names.board
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
@@ -707,7 +707,8 @@ export function register(on) {
     if (key === 'ttl') {
       settings.ttlMin = value === '5' ? 5 : value === '60' ? 60 : 0
     } else if (key === 'guard' || key === 'alerts') {
-      settings[key] = value !== 'off'
+      // no value toggles
+      settings[key] = value === undefined ? !settings[key] : value !== 'off'
     } else if (key === 'big') {
       const n = parseTokens(value)
       if (n) settings.bigTokens = n
