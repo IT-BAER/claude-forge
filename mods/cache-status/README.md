@@ -54,7 +54,7 @@ Hover `c`, `rwc` or `sc` for a one-line explanation above the band. On a subscri
 
 - Short band labels (`c`, `rwc`, `sc`, `w`) so the band fits next to the prompt, session cost before the plan limits.
 - Hover help for the short labels. The help row opens above the band, so the hovered text does not move.
-- Handoff files: when Claude writes a `session-handoff.md`, a `restart-packet.md` or a file under `handoffs/` with an active handoff header, the band offers to clear and continue from that file. The fresh chat gets a short "read this file" prompt instead of the whole text.
+- Handoff files: when Claude writes a `session-handoff.md`, a `restart-packet.md` (also with a suffix, like `session-handoff-pve.md`) or a file under `handoffs/` with an active handoff header, the band offers to clear and continue from that file. If a handoff turn ends on a short answer (a Stop hook added a tail), the last handoff file written in the session is used instead. The fresh chat gets a short "read this file" prompt instead of the whole text.
 - Renamed to `cache-status`. Data lives in `~/.claude/mods-data/cache-status/`.
 
 ## Where the data lives

@@ -71,11 +71,13 @@ const H = {
   text: '',
   path: '',
   file: '', // a handoff file Claude wrote with Write/Edit this turn (no button, no command)
+  lastFile: '', // the last handoff file written this session: the fallback when a handoff turn ends on a short answer
   fromFile: false, // H.text came from that file: the fresh chat reads it by path
   continuing: false,
 }
 
-const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)\.md|\/handoffs\/[^"'\s]*\.md)/
+// session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
+const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)[^"'\s/]*\.md|\/handoffs\/[^"'\s]*\.md)/
 
 // Notes a write to a handoff file; the turn end loads it.
 function noteHandoffFile(e) {
@@ -87,17 +89,17 @@ function noteHandoffFile(e) {
     return
   }
   const m = HANDOFF_FILE.exec(raw.replace(/\\\\/g, '/'))
-  if (m) H.file = m[0]
+  if (m) H.file = H.lastFile = m[0]
 }
 
-// A handoff file written this turn that is still active becomes the ready handoff.
-async function captureHandoffFile($) {
-  const path = H.file
+// A handoff file that is still active becomes the ready handoff.
+async function captureHandoffFile($, path = H.file) {
   H.file = ''
   try {
-    if (!(await $.fs.exists(path))) return false
+    if (!path || !(await $.fs.exists(path))) return false
     const text = await $.fs.read(path)
     if (!/^<!--\s*handoff:[^>]*status:\s*active/.test(text)) return false
+    const askAfter = H.askAfter
     H.text = text.trim()
     H.path = path
     H.fromFile = true
@@ -105,6 +107,8 @@ async function captureHandoffFile($) {
     H.notTurn = ''
     H.askAfter = false
     $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    // Off the hook: the turn is ending, and a dialog would hold it open
+    if (askAfter) $.clock.after(300, () => offerContinue($).catch(() => {}))
     return true
   } catch {
     return false
@@ -143,6 +147,10 @@ async function captureHandoff($, e) {
   H.askAfter = false
   const body = e.reason === 'answer' ? handoffBody(e.answer) : ''
   if (body.length < 200) {
+    // A Stop hook can end the turn on a short tail; the skill's file still holds the handoff
+    H.askAfter = askAfter
+    if (await captureHandoffFile($, H.lastFile)) return
+    H.askAfter = false
     $.ui.toast('The handoff turn ended without a handoff, so nothing was saved.', { timeoutMs: 8000 })
     return
   }
