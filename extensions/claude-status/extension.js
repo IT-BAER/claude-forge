@@ -1,11 +1,12 @@
 const vscode = require('vscode')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, tooltip, boardItems, handoffItem, writeCommand } = require('./status')
+const { readLive, readVscodeSessions, pickSession, render, tooltip, boardItems, handoffItem, writeCommand } = require('./status')
 
 const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'cache-status')
 const LIVE_DIR = path.join(DATA_DIR, 'live')
 const COMMAND_DIR = path.join(DATA_DIR, 'commands')
+const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions')
 const REFRESH_MS = 2000
 const PENDING_MS = 15000 // how long a click shows its own label before the mod answers
 const TONE_BG = { warning: 'statusBarItem.warningBackground', error: 'statusBarItem.errorBackground' }
@@ -24,7 +25,8 @@ function activate(context) {
   const refresh = () => {
     const now = Date.now()
     const folders = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath)
-    session = pickSession(readLive(LIVE_DIR, now), folders, now)
+    const vscodeChats = readVscodeSessions(SESSIONS_DIR)
+    session = pickSession(readLive(LIVE_DIR, now), folders, now, vscodeChats)
     if (!session) {
       item.hide()
       handoff.hide()
@@ -32,7 +34,7 @@ function activate(context) {
     }
     const r = render(session, now)
     item.text = r.text
-    item.tooltip = new vscode.MarkdownString(tooltip(session, now))
+    item.tooltip = new vscode.MarkdownString(tooltip({ ...session, label: vscodeChats.get(session.id) || session.label }, now))
     item.backgroundColor = TONE_BG[r.tone] ? new vscode.ThemeColor(TONE_BG[r.tone]) : undefined
     item.show()
 

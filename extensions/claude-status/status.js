@@ -53,12 +53,35 @@ function normPath(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 }
 
+// Chats the VS Code extension started, sessionId -> name, from Claude Code's
+// per-process session files (entrypoint claude-vscode, claude-desktop, cli).
+function readVscodeSessions(dir) {
+  const map = new Map()
+  let names
+  try {
+    names = fs.readdirSync(dir).filter((n) => n.endsWith('.json'))
+  } catch {
+    return map
+  }
+  for (const name of names) {
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+      if (s && s.sessionId && s.entrypoint === 'claude-vscode') map.set(s.sessionId, s.name || '')
+    } catch {
+      // half-written or broken file: skip
+    }
+  }
+  return map
+}
+
 // This window's session: cwd equals a workspace folder and the file is still
-// being written (a reload kills a chat without marking its file ended); a VS
-// Code session wins over a terminal or desktop one, then the newest activity.
-function pickSession(list, folders, now) {
+// being written (a reload kills a chat without marking its file ended). A chat
+// the VS Code extension started wins over a Desktop or terminal one in the same
+// folder; then the newest activity.
+function pickSession(list, folders, now, vscode = new Map()) {
   const want = new Set(folders.map(normPath))
-  const mine = list.filter((s) => want.has(normPath(s.cwd)) && now - (s.updatedAt || 0) <= ALIVE_MS)
+  let mine = list.filter((s) => want.has(normPath(s.cwd)) && now - (s.updatedAt || 0) <= ALIVE_MS)
+  if (mine.some((s) => vscode.has(s.id))) mine = mine.filter((s) => vscode.has(s.id))
   const rank = (s) => [(s.surfaces || []).includes('vscode') ? 1 : 0, s.lastActivity || 0, s.updatedAt || 0]
   mine.sort((a, b) => {
     const ra = rank(a), rb = rank(b)
@@ -156,4 +179,4 @@ function writeCommand(dir, id, cmd, now) {
   fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify({ cmd, at: now }))
 }
 
-module.exports = { readLive, pickSession, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }
+module.exports = { readLive, readVscodeSessions, pickSession, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }

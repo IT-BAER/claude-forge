@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, boardItems, handoffItem, writeCommand } = require('../status')
+const { readLive, pickSession, render, boardItems, handoffItem, writeCommand, readVscodeSessions } = require('../status')
 
 const MIN = 60000
 const NOW = 10_000_000_000
@@ -110,4 +110,26 @@ test('a session that stopped writing its file loses to a live one, even with new
   ]
   assert.equal(pickSession(list, ['d:\\VSC\\demo'], NOW).id, 'alive')
   assert.equal(pickSession(list.slice(0, 1), ['d:\\VSC\\demo'], NOW), undefined)
+})
+test('readVscodeSessions lists the chats the VS Code extension started, with their names', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-status-'))
+  try {
+    fs.writeFileSync(path.join(dir, '1.json'), JSON.stringify({ sessionId: 'vs', entrypoint: 'claude-vscode', name: 'demo-d5' }))
+    fs.writeFileSync(path.join(dir, '2.json'), JSON.stringify({ sessionId: 'desk', entrypoint: 'claude-desktop', name: 'Remote git update' }))
+    fs.writeFileSync(path.join(dir, '3.json'), '{')
+    const m = readVscodeSessions(dir)
+    assert.deepEqual([...m.entries()], [['vs', 'demo-d5']])
+    assert.equal(readVscodeSessions(path.join(dir, 'missing')).size, 0)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a VS Code chat wins over a newer Desktop chat in the same folder', () => {
+  const list = [
+    hb({ id: 'desk', cwd: 'D:\\VSC\\demo', lastActivity: NOW - 1 * MIN }),
+    hb({ id: 'vs', cwd: 'd:\\VSC\\demo', lastActivity: 0 }),
+  ]
+  assert.equal(pickSession(list, ['d:\\VSC\\demo'], NOW, new Map([['vs', 'demo-d5']])).id, 'vs')
+  assert.equal(pickSession(list, ['d:\\VSC\\demo'], NOW, new Map()).id, 'desk')
 })
