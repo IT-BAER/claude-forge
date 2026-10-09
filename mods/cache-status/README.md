@@ -14,7 +14,7 @@ Every request re-reads the whole chat. From the prompt cache that costs a tenth 
 
 ## Requirements
 
-- Claude Code 2.1.287 or later, in the terminal or the Desktop app's Code tab.
+- Claude Code 2.1.287 or later, in the terminal or the Desktop app's Code tab. The VS Code chat does not draw the band; the [claude-status](../../extensions/claude-status) extension shows the same values in the VS Code status bar.
 - Mods turned on for your account. `claude plugin test` in any folder answers "no hooks module to load" when mods can load.
 - Do not install it next to Cache Keeper. Both register the same commands.
 

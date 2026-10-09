@@ -1,0 +1,30 @@
+{
+  "name": "claude-status",
+  "displayName": "Claude Status",
+  "description": "Prompt cache, context, cost and plan limits of your Claude Code session in the VS Code status bar. Reads the cache-status mod's live files.",
+  "version": "0.1.0",
+  "publisher": "it-baer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IT-BAER/claude-forge.git",
+    "directory": "extensions/claude-status"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeStatus.showSessions",
+        "title": "Claude Status: Show All Sessions"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

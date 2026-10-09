@@ -11,6 +11,12 @@ A mod adds a pane, a band or a command to Claude Code itself.
 | [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
 | [`cache-status`](mods/cache-status) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board` and `/handoff`. Fork of Cache Keeper by Nate Herk. |
 
+## VS Code extensions
+
+| Extension | What it does |
+| --- | --- |
+| [`claude-status`](extensions/claude-status) | The `cache-status` values in the VS Code status bar, because mods cannot draw above the prompt in the VS Code chat. Needs the `cache-status` mod. Install from a built .vsix. |
+
 ## Skills
 
 A skill teaches Claude a repeatable task. No skills are published yet.
@@ -78,6 +84,7 @@ The marketplace plugin has no pinned version, so every new commit in this reposi
 | --- | --- |
 | `mods/<name>/` | A Claude Code mod (hooks plugin) with its own `README.md` and `screenshots/`. |
 | `skills/<name>/` | A skill: `SKILL.md` plus its helper files, with its own `README.md`. |
+| `extensions/<name>/` | A VS Code extension, built with `npx @vscode/vsce package`. |
 
 ## Notes
 

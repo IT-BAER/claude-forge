@@ -363,7 +363,27 @@ async function heartbeat($, force) {
   } catch {
     // agent list unavailable: keep the last count
   }
-  await $.store.set('hb:' + S.id, myHeartbeat())
+  const hb = myHeartbeat()
+  await $.store.set('hb:' + S.id, hb)
+  await writeLive($, hb, false)
+}
+
+// One file per session for tools outside Claude Code (the VS Code status bar
+// extension): the heartbeat plus plan limits, rewrite price and surfaces.
+async function writeLive($, hb, ended) {
+  if (!home || !hb.id) return
+  try {
+    let surfaces = []
+    try {
+      surfaces = await $.session.surfaces()
+    } catch {
+      // surfaces unavailable: the reader falls back to matching the cwd
+    }
+    const live = { ...hb, surfaces, rateLimits: S.rateLimits, rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, ended }
+    await $.fs.write(`${home}/.claude/mods-data/cache-status/live/${hb.id}.json`.replace(/\\/g, '/'), JSON.stringify(live))
+  } catch {
+    // a failed write only leaves the outside readers stale
+  }
 }
 
 async function readFleet($) {
@@ -530,7 +550,10 @@ export function register(on) {
   })
 
   on('session.end', async ($, e, next) => {
-    if (S.id) await $.store.delete('hb:' + S.id)
+    if (S.id) {
+      await $.store.delete('hb:' + S.id)
+      await writeLive($, myHeartbeat(), true)
+    }
     return next(e)
   })
 
@@ -815,8 +838,8 @@ export function register(on) {
     return drawBoard($, e)
   })
 
-  // The band is terminal-only. The footer also draws in the Desktop app, so it
-  // carries a short label, only when there's something to act on.
+  // The footer draws in the terminal and the Desktop app; it carries a short
+  // label, only when there's something to act on.
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     const label = footerLabel()
     if (!label) return next(e)
