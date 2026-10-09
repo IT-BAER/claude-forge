@@ -24,7 +24,7 @@ function activate(context) {
   const refresh = () => {
     const now = Date.now()
     const folders = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath)
-    session = pickSession(readLive(LIVE_DIR, now), folders)
+    session = pickSession(readLive(LIVE_DIR, now), folders, now)
     if (!session) {
       item.hide()
       handoff.hide()
@@ -38,6 +38,10 @@ function activate(context) {
 
     if (pending && (pending.id !== session.id || (session.handoff || 'idle') !== pending.from || now > pending.until)) pending = undefined
     const h = handoffItem(session)
+    if (!h) {
+      handoff.hide()
+      return
+    }
     handoff.text = pending ? pending.text : h.text
     handoff.command = !pending && h.cmd ? 'claudeStatus.handoffAction' : undefined
     handoff.tooltip = h.cmd === 'continue' ? 'Clear this chat and continue from the handoff' : h.cmd ? 'Run /session-handoff in this chat' : undefined
@@ -47,7 +51,7 @@ function activate(context) {
   const handoffAction = () => {
     if (!session) return
     const h = handoffItem(session)
-    if (!h.cmd) return
+    if (!h || !h.cmd) return
     try {
       writeCommand(COMMAND_DIR, session.id, h.cmd, Date.now())
     } catch (err) {

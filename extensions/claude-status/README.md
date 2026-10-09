@@ -28,7 +28,7 @@ There is no Marketplace listing. Build and install the .vsix:
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.0.vsix
+code --install-extension claude-status-0.2.1.vsix
 ```
 
 ## How it works

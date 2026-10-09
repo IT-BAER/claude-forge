@@ -55,9 +55,9 @@ test('picks the newest vscode session of this workspace, any case of drive lette
     hb({ id: 'new', cwd: 'd:/VSC/demo', lastActivity: NOW - 2 * MIN }),
     hb({ id: 'other', cwd: 'd:\\VSC\\other', lastActivity: NOW }),
   ]
-  assert.equal(pickSession(list, ['D:\\VSC\\demo']).id, 'new')
-  assert.equal(pickSession(list.slice(0, 1), ['d:\\vsc\\demo']).id, 'desktop')
-  assert.equal(pickSession(list, ['d:\\VSC\\none']), undefined)
+  assert.equal(pickSession(list, ['D:\\VSC\\demo'], NOW).id, 'new')
+  assert.equal(pickSession(list.slice(0, 1), ['d:\\vsc\\demo'], NOW).id, 'desktop')
+  assert.equal(pickSession(list, ['d:\\VSC\\none'], NOW), undefined)
 })
 
 test('readLive skips ended, stale and broken files', () => {
@@ -86,7 +86,7 @@ test('board lists waiting first, then working, then by cache time left', () => {
 
 test('handoff item follows the mod state like the band button', () => {
   assert.deepEqual(handoffItem(hb({ handoff: 'idle' })), { text: 'handoff', cmd: 'handoff' })
-  assert.deepEqual(handoffItem(hb({})), { text: 'handoff', cmd: 'handoff' })
+  assert.equal(handoffItem(hb({})), null)
   assert.deepEqual(handoffItem(hb({ handoff: 'queued' })), { text: 'handoff queued', cmd: null })
   assert.deepEqual(handoffItem(hb({ handoff: 'running' })), { text: '$(sync~spin) handoff running', cmd: null })
   assert.deepEqual(handoffItem(hb({ handoff: 'ready' })), { text: 'clear and continue', cmd: 'continue' })
@@ -102,4 +102,12 @@ test('writeCommand leaves one command file per session for the mod', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+test('a session that stopped writing its file loses to a live one, even with newer activity', () => {
+  const list = [
+    hb({ id: 'dead', lastActivity: NOW - 1 * MIN, updatedAt: NOW - 3 * MIN }),
+    hb({ id: 'alive', lastActivity: NOW - 20 * MIN, updatedAt: NOW - 10000 }),
+  ]
+  assert.equal(pickSession(list, ['d:\\VSC\\demo'], NOW).id, 'alive')
+  assert.equal(pickSession(list.slice(0, 1), ['d:\\VSC\\demo'], NOW), undefined)
 })

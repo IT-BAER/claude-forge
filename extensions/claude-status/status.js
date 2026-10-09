@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const MIN = 60000
 const STALE_MS = 60 * MIN // the mod drops heartbeats older than this too
+const ALIVE_MS = 2 * MIN // a running session rewrites its file at least every 30 seconds
 const LIMIT_LABEL = { five_hour: '5h', seven_day: 'w', spend_limit: 'spend' }
 
 function tokens(n) {
@@ -52,11 +53,12 @@ function normPath(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 }
 
-// This window's session: cwd equals a workspace folder; a VS Code session wins
-// over a terminal or desktop one in the same folder, then the newest activity.
-function pickSession(list, folders) {
+// This window's session: cwd equals a workspace folder and the file is still
+// being written (a reload kills a chat without marking its file ended); a VS
+// Code session wins over a terminal or desktop one, then the newest activity.
+function pickSession(list, folders, now) {
   const want = new Set(folders.map(normPath))
-  const mine = list.filter((s) => want.has(normPath(s.cwd)))
+  const mine = list.filter((s) => want.has(normPath(s.cwd)) && now - (s.updatedAt || 0) <= ALIVE_MS)
   const rank = (s) => [(s.surfaces || []).includes('vscode') ? 1 : 0, s.lastActivity || 0, s.updatedAt || 0]
   mine.sort((a, b) => {
     const ra = rank(a), rb = rank(b)
@@ -143,7 +145,9 @@ const HANDOFF = {
   clearing: { text: '$(sync~spin) clearing', cmd: null },
 }
 
+// null: the session runs a mod version without command files, so no button
 function handoffItem(s) {
+  if (s.handoff === undefined) return null
   return { ...(HANDOFF[s.handoff] || HANDOFF.idle) }
 }
 
