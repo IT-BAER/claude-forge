@@ -12,11 +12,12 @@ const PENDING_MS = 15000 // how long a click shows its own label before the mod 
 const TONE_BG = { warning: 'statusBarItem.warningBackground', error: 'statusBarItem.errorBackground' }
 
 function activate(context) {
-  // Right side, low priority: next to the edge, under the chat panel. Lower sits further right.
-  const item = vscode.window.createStatusBarItem('claudeStatus.item', vscode.StatusBarAlignment.Right, -100)
+  // Right side, highest priority: left of every other right-side item, the
+  // Claude Code item included. Higher sits further left.
+  const item = vscode.window.createStatusBarItem('claudeStatus.item', vscode.StatusBarAlignment.Right, Number.MAX_SAFE_INTEGER)
   item.name = 'Claude Status'
   item.command = 'claudeStatus.showSessions'
-  const handoff = vscode.window.createStatusBarItem('claudeStatus.handoff', vscode.StatusBarAlignment.Right, -101)
+  const handoff = vscode.window.createStatusBarItem('claudeStatus.handoff', vscode.StatusBarAlignment.Right, Number.MAX_SAFE_INTEGER - 1)
   handoff.name = 'Claude Status Handoff'
 
   let session // the session shown, for the handoff click
