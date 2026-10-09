@@ -92,13 +92,15 @@ function noteHandoffFile(e) {
   if (m) H.file = H.lastFile = m[0]
 }
 
-// A handoff file that is still active becomes the ready handoff.
+// A handoff file becomes the ready handoff unless its header retires it
+// (status: consumed). Free-hand handoffs often lack the skill's <!-- handoff: --> header.
 async function captureHandoffFile($, path = H.file) {
   H.file = ''
   try {
     if (!path || !(await $.fs.exists(path))) return false
-    const text = await $.fs.read(path)
-    if (!/^<!--\s*handoff:[^>]*status:\s*active/.test(text)) return false
+    const text = (await $.fs.read(path)).replace(/^﻿/, '')
+    const status = /status:\s*(\w+)/i.exec(text.split('\n', 3).join('\n'))
+    if (text.trim().length < 200 || (status && status[1].toLowerCase() !== 'active')) return false
     const askAfter = H.askAfter
     H.text = text.trim()
     H.path = path
