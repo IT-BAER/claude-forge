@@ -1,12 +1,13 @@
 const vscode = require('vscode')
 const os = require('node:os')
 const path = require('node:path')
-const { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, handoffItem, writeCommand } = require('./status')
+const { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, handoffItem, writeCommand, modMissing } = require('./status')
 
 const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'cache-status')
 const LIVE_DIR = path.join(DATA_DIR, 'live')
 const COMMAND_DIR = path.join(DATA_DIR, 'commands')
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions')
+const SETUP_URL = 'https://github.com/IT-BAER/claude-forge/tree/main/extensions/claude-status#requirements'
 const REFRESH_MS = 2000
 const PENDING_MS = 15000 // how long a click shows its own label before the mod answers
 // The band's colours as theme colours, so each theme keeps its own shades
@@ -31,6 +32,16 @@ function activate(context) {
     i.color = new vscode.ThemeColor('disabledForeground')
     return i
   }
+  // Shown alone while no chat on this machine has run the mod
+  const hint = create('claudeStatus.modMissing', 'Claude Status Setup')
+  hint.text = '$(warning) cache-status mod not found'
+  hint.tooltip = new vscode.MarkdownString([
+    'Claude Status shows what the **cache-status** mod writes, and no Claude Code chat on this machine has run it yet.',
+    'Install it in Claude Code, then restart the chat:',
+    '```\n/plugin marketplace add IT-BAER/claude-forge\n/plugin install cache-status@claude-forge\n```',
+    'Click for the setup steps.',
+  ].join('\n\n'))
+  hint.command = { title: 'Open setup steps', command: 'vscode.open', arguments: [vscode.Uri.parse(SETUP_URL)] }
   const left = dim('claudeStatus.edgeLeft', '┃')
   // One item per colour group (an item has one colour): at most one per segment
   const slots = KEYS.map((_, i) => {
@@ -53,8 +64,10 @@ function activate(context) {
     if (session) session = { ...session, rateLimits: accountLimits(live, now) }
     if (!session) {
       for (const i of all) i.hide()
+      if (modMissing(LIVE_DIR)) hint.show()
       return
     }
+    hint.hide()
     left.show()
     right.show()
     const tip = new vscode.MarkdownString(tooltip({ ...session, label: vscodeChats.get(session.id) || session.label }, now))

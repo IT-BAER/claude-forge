@@ -49,6 +49,15 @@ function readLive(dir, now) {
   return list
 }
 
+// The mod never deletes live files: none at all means it has never run here
+function modMissing(dir) {
+  try {
+    return !fs.readdirSync(dir).some((n) => n.endsWith('.json'))
+  } catch {
+    return true
+  }
+}
+
 function normPath(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 }
@@ -216,4 +225,4 @@ function writeCommand(dir, id, cmd, now) {
   fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify({ cmd, at: now }))
 }
 
-module.exports = { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }
+module.exports = { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, cacheState, handoffItem, writeCommand, modMissing }

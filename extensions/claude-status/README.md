@@ -3,7 +3,7 @@
 The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods cannot draw above the prompt in the VS Code chat, so this extension shows the same values in the VS Code status bar.
 
 > [!IMPORTANT]
-> This extension does nothing on its own. It has no data source of its own and only shows what the **cache-status mod** writes. Installed without the mod, the status bar stays empty. Install the mod first (see [Requirements](#requirements)). Claude Desktop is not needed: the mod runs inside the Claude Code process that the VS Code chat starts.
+> This extension does nothing on its own. It has no data source of its own and only shows what the **cache-status mod** writes. Installed without the mod, the status bar shows only `cache-status mod not found`; click it for these setup steps. Install the mod first (see [Requirements](#requirements)). Claude Desktop is not needed: the mod runs inside the Claude Code process that the VS Code chat starts.
 
 <img src="screenshots/statusbar.png" alt="Claude Status in the VS Code status bar" width="686">
 
@@ -48,7 +48,7 @@ Install the cache-status mod first (see [Requirements](#requirements)). There is
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.8.vsix
+code --install-extension claude-status-0.2.9.vsix
 ```
 
 Then run **Developer: Reload Window**.

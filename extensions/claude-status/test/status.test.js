@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups } = require('../status')
+const { readLive, pickSession, render, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups, modMissing } = require('../status')
 
 const MIN = 60000
 const NOW = 10_000_000_000
@@ -163,4 +163,17 @@ test('segments of one colour share a status item, every dot has a 16 px gap on b
     { text: `·${G}ctx 184k${G}·${G}rwc ≈ $1.20${G}·${G}sc $3.31`, color: null },
     { text: `·${G}5h 85%`, color: 'yellow' },
   ])
+})
+
+test('the mod counts as missing until it has written a live file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-status-'))
+  try {
+    assert.equal(modMissing(path.join(dir, 'live')), true)
+    fs.mkdirSync(path.join(dir, 'live'))
+    assert.equal(modMissing(path.join(dir, 'live')), true)
+    fs.writeFileSync(path.join(dir, 'live', 'old.json'), JSON.stringify(hb({ ended: true })))
+    assert.equal(modMissing(path.join(dir, 'live')), false)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })
