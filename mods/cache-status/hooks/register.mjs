@@ -230,6 +230,8 @@ async function clearAndContinue($) {
   H.text = ''
   H.path = ''
   H.fromFile = false
+  // our own prompt.submit hook never sees this submission
+  H.resuming = true
   try {
     await $.prompt.submit({ text, asUser: true })
   } catch {

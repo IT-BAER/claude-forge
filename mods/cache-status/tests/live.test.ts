@@ -183,6 +183,31 @@ test('a resume turn that calls the skill but never edits the file saves no hando
   expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
 })
 
+test('the resume turn after clear and continue does not arm a new handoff', async ($, on) => {
+  let messages: any[] = [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 't1', tool: 'Write', input: { file_path: HF, content: '...' } }] }]
+  const { files, clock, live, sid } = await start($, on, (on) => {
+    on('session.messages', () => ({ value: messages }))
+    on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', () => ({ result: { text: '' } }))
+  }, { [HF]: handoffFile('active') })
+  expect(live().handoff).toBe('ready')
+  files[CMD] = JSON.stringify({ cmd: 'continue', at: NOW })
+  await clock.advance(2000)
+  await $.session.end({ reason: 'clear', sessionId: 'sess-1' } as any)
+  sid.value = 'sess-2'
+  messages = [{ role: 'user', text: `Continue from session handoff: read ${HF}`, toolUses: [] }]
+  await clock.advance(2000)
+  await $.turn.start({ turnId: 't2' } as any)
+  await $.tool.call({ tool: 'Skill', skill: 'session-handoff' } as any)
+  await clock.advance(2000)
+  expect(live('sess-2').handoff).toBe('idle')
+  await $.turn.complete({ reason: 'answer', answer: 'Resumed from the handoff. '.repeat(20), durationMs: 1, isAborted: false, turnId: 't2' } as any)
+  expect(live('sess-2').handoff).toBe('idle')
+  expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
+})
+
 test('a denied edit of a handoff file is not a handoff write', async ($, on) => {
   const { live } = await start($, on, (on) => {
     on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
