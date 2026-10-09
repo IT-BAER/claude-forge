@@ -62,6 +62,7 @@ let handoffPending = false
 let lastLiveHandoff = '' // handoff state in the last live file
 let lastCommandAt = 0 // newest command file already taken
 let outsideBusy = false
+let endedId = '' // the chat session.end closed: never written as live again
 
 // The handoff flow. When /session-handoff runs (the band's button, /handoff, a
 // typed command, or Claude calling the skill), the answer of the turn it starts
@@ -391,10 +392,11 @@ async function writeLive($, hb, ended) {
   }
 }
 
-// A reopened chat starts with nothing in memory: take context, cost and limits
-// from the engine (local estimate, no request), the cache time from the
-// transcript's last write, and an active handoff file the chat wrote earlier.
-async function restoreResumed($, transcriptPath) {
+// A chat this process enters (launch, --resume, /clear, /resume) starts with
+// nothing in memory: context, cost and limits come from the engine (local
+// estimate, no request); a reopened chat also brings its cache time and an
+// active handoff file it wrote earlier.
+async function restoreSession($) {
   try {
     const u = await $.session.usage({ breakdown: 'summary' })
     const c = u.context || {}
@@ -405,21 +407,59 @@ async function restoreResumed($, transcriptPath) {
   } catch {
     // usage unavailable: the first request fills it in
   }
-  if (transcriptPath) {
-    try {
-      S.lastActivity = (await $.fs.stat(transcriptPath)).mtimeMs || 0
-    } catch {
-      // no transcript: the cache state stays unknown
-    }
-  }
+  let messages = []
   try {
-    for (const m of await $.session.messages()) for (const t of m.toolUses || []) noteHandoffFile(t)
+    messages = await $.session.messages()
+  } catch {
+    // no messages: nothing more to restore
+  }
+  if (messages.length) {
+    S.lastActivity = await lastResponseAt($)
+    for (const m of messages) for (const t of m.toolUses || []) noteHandoffFile(t)
     H.file = ''
     if (H.lastFile) await captureHandoffFile($, H.lastFile)
-  } catch {
-    // no messages: no handoff to restore
   }
   await heartbeat($, true)
+}
+
+// When the transcript's last model response was written. Not the file's mtime:
+// a resume appends rows. Claude Code names the folder after the launch cwd.
+async function lastResponseAt($) {
+  const path = `${home}/.claude/projects/${S.cwd.replace(/[^A-Za-z0-9]/g, '-')}/${S.id}.jsonl`.replace(/\\/g, '/')
+  let lines = []
+  try {
+    lines = (await $.fs.read(path)).split('\n')
+  } catch {
+    return 0 // no transcript there: the cache state stays unknown
+  }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"assistant"')) continue
+    try {
+      const row = JSON.parse(lines[i])
+      if (row.type === 'assistant' && row.timestamp) return Date.parse(row.timestamp) || 0
+    } catch {
+      // a half-written last line
+    }
+  }
+  return 0
+}
+
+// /clear, /resume and /branch go on under a new id without a session.start, and
+// classic.SessionStart never reaches a mod: follow $.session.id() instead.
+async function followSessionId($) {
+  let id = ''
+  try {
+    id = await $.session.id()
+  } catch {
+    return
+  }
+  if (!id || id === S.id || id === endedId) return
+  S.id = id
+  S.label = basename(S.cwd)
+  S.lastActivity = 0
+  S.keepWarm = false
+  H.armed = false
+  await restoreSession($)
 }
 
 function outsidePath(dir, id) {
@@ -456,10 +496,12 @@ async function applyFileCommand($) {
 }
 
 async function outsideStep($) {
-  if (!home || !S.id || outsideBusy) return
+  if (!home || outsideBusy) return
   outsideBusy = true
   try {
     now = await $.clock.now()
+    await followSessionId($)
+    if (!S.id) return
     await applyFileCommand($)
     if (handoffState() !== lastLiveHandoff) await heartbeat($, true)
   } finally {
@@ -612,30 +654,18 @@ export function register(on) {
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
     $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
-    await heartbeat($, true)
+    await restoreSession($)
     return next(e)
   })
 
-  // /clear, /resume and /branch start from an unknown cache. The process goes
-  // on under a new session id, and no session.start fires for it.
-  on('classic.SessionStart', { source: ['clear', 'resume', 'fork'] }, async ($, e, next) => {
-    S.lastActivity = 0
-    S.keepWarm = false
-    H.armed = false
-    try {
-      S.id = (await $.session.id()) || S.id
-    } catch {
-      // keep the old id
-    }
-    S.label = basename(S.cwd)
-    if (e.source === 'resume') await restoreResumed($, e.transcript_path)
-    return next(e)
-  })
-
+  // A /clear or /resume ends the chat but not the process: no heartbeat may
+  // write this id again, and followSessionId picks up the next one.
   on('session.end', async ($, e, next) => {
     if (S.id) {
       await $.store.delete('hb:' + S.id)
       await writeLive($, myHeartbeat(), true)
+      endedId = S.id
+      S.id = ''
     }
     return next(e)
   })
@@ -643,6 +673,7 @@ export function register(on) {
   // The first prompt names the session on the board
   on('prompt.submit', async ($, e, next) => {
     now = await $.clock.now()
+    await followSessionId($) // a prompt right after /clear: the new chat before its first request
     if (S.label === basename(S.cwd) && e.origin && e.origin.kind === 'composer' && e.text) {
       S.label = basename(S.cwd) + ' · ' + clip(e.text, 40)
     }
