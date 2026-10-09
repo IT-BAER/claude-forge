@@ -5,7 +5,7 @@ const LIVE = `${BASE}/live/sess-1.json`
 const CMD = `${BASE}/commands/sess-1.json`
 const NOW = 1_000_000
 
-async function start($: any, on: any, surfaces: string[] = ['vscode']) {
+async function start($: any, on: any, extra: (on: any) => void = () => {}) {
   const files: Record<string, string> = {}
   const ran: string[] = []
   const clock = mock.clock(on, { now: NOW })
@@ -15,7 +15,8 @@ async function start($: any, on: any, surfaces: string[] = ['vscode']) {
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.cwd', () => ({ value: 'd:\\VSC\\demo' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('session.surfaces', () => ({ value: surfaces }))
+  on('session.surfaces', () => ({ value: ['vscode'] }))
+  extra(on)
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: [] }))
@@ -72,4 +73,20 @@ test('continue without a ready handoff does not clear', async ($, on) => {
   files[CMD] = JSON.stringify({ cmd: 'continue', at: NOW })
   await clock.advance(2000)
   expect(ran).not.toContain('clear')
+})
+
+test('a resumed chat restores context, cost, cache time and a ready handoff', async ($, on) => {
+  const { files, live } = await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 0, window: 200000, breakdown: { categories: [], totalTokens: 90000, maxTokens: 200000, rawMaxTokens: 200000 } }, rateLimits: [{ kind: 'five_hour', percentUsed: 48 }], cost: { usd: 1.08 } } }))
+    on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: NOW - 8 * 60000, isLink: false } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 't1', tool: 'Write', input: { file_path: 'D:\\p\\.claude\\session-handoff.md', content: '...' } }] }] }))
+    on('classic.SessionStart', () => ({}))
+  })
+  files['D:/p/.claude/session-handoff.md'] = '<!-- handoff: 2026-10-09T20:45:45+02:00 | session: sess-1 | status: active -->\n' + 'x'.repeat(300)
+  await $.classic.SessionStart({ source: 'resume', transcript_path: 'D:/t/sess-1.jsonl' } as any)
+  expect(live().ctx).toBe(90000)
+  expect(live().costUsd).toBe(1.08)
+  expect(live().rateLimits).toEqual([{ kind: 'five_hour', percentUsed: 48 }])
+  expect(live().lastActivity).toBe(NOW - 8 * 60000)
+  expect(live().handoff).toBe('ready')
 })

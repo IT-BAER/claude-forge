@@ -391,6 +391,37 @@ async function writeLive($, hb, ended) {
   }
 }
 
+// A reopened chat starts with nothing in memory: take context, cost and limits
+// from the engine (local estimate, no request), the cache time from the
+// transcript's last write, and an active handoff file the chat wrote earlier.
+async function restoreResumed($, transcriptPath) {
+  try {
+    const u = await $.session.usage({ breakdown: 'summary' })
+    const c = u.context || {}
+    S.ctx = c.tokens || (c.breakdown && c.breakdown.totalTokens) || S.ctx
+    if (c.window) S.window = c.window
+    if (u.cost) S.costUsd = u.cost.usd
+    if (Array.isArray(u.rateLimits) && u.rateLimits.length) S.rateLimits = u.rateLimits
+  } catch {
+    // usage unavailable: the first request fills it in
+  }
+  if (transcriptPath) {
+    try {
+      S.lastActivity = (await $.fs.stat(transcriptPath)).mtimeMs || 0
+    } catch {
+      // no transcript: the cache state stays unknown
+    }
+  }
+  try {
+    for (const m of await $.session.messages()) for (const t of m.toolUses || []) noteHandoffFile(t)
+    H.file = ''
+    if (H.lastFile) await captureHandoffFile($, H.lastFile)
+  } catch {
+    // no messages: no handoff to restore
+  }
+  await heartbeat($, true)
+}
+
 function outsidePath(dir, id) {
   return `${home}/.claude/mods-data/cache-status/${dir}/${id}.json`.replace(/\\/g, '/')
 }
@@ -597,6 +628,7 @@ export function register(on) {
       // keep the old id
     }
     S.label = basename(S.cwd)
+    if (e.source === 'resume') await restoreResumed($, e.transcript_path)
     return next(e)
   })
 
