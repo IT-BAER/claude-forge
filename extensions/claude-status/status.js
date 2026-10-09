@@ -91,6 +91,38 @@ function pickSession(list, folders, now, vscode = new Map()) {
   return mine[0]
 }
 
+// Plan limits are the account's, and within one window they only grow: per kind,
+// the newest open window's highest value across all chats is the current one
+// (a reopened chat has none until its first turn ends).
+function accountLimits(list, now) {
+  const best = new Map()
+  const end = (l) => (l.resetsAt ? Date.parse(l.resetsAt) : Infinity)
+  for (const s of list) {
+    for (const l of s.rateLimits || []) {
+      if (end(l) <= now) continue
+      const b = best.get(l.kind)
+      if (!b || end(l) > end(b) || (end(l) === end(b) && (l.percentUsed || 0) > (b.percentUsed || 0))) best.set(l.kind, l)
+    }
+  }
+  return [...best.values()]
+}
+
+// VS Code puts 16 px between two items (3 px margin, 5 px padding each side, 12 px
+// font): em + four-per-em + hair space match it, so every dot sits centred.
+const GAP = '\u2003\u2005\u200a'
+
+// Consecutive segments of one colour share a status item: VS Code pads every
+// item, so a separate item per dot spaces the dots too far apart.
+function groups(segments) {
+  const out = []
+  for (const g of segments) {
+    const last = out[out.length - 1]
+    if (last && last.color === g.color) last.text += GAP + '·' + GAP + g.text
+    else out.push({ text: (out.length ? '·' + GAP : '') + g.text, color: g.color })
+  }
+  return out
+}
+
 function cacheState(s, now) {
   if (!s.lastActivity) return { kind: 'unknown', left: 0 }
   const left = (s.ttlMin || 60) * MIN - (now - s.lastActivity)
@@ -104,25 +136,30 @@ function limitsText(limits) {
   return limits.map((l) => `${LIMIT_LABEL[l.kind] || l.kind} ${Math.round(l.percentUsed || 0)}%`).join(' · ')
 }
 
+// One segment per band part, each with the band's colour for it (null: plain)
 function render(s, now) {
   const st = cacheState(s, now)
-  const big = (s.ctx || 0) >= (s.bigTokens || 150000)
+  const coldBig = st.kind === 'cold' && (s.ctx || 0) >= (s.bigTokens || 150000)
   const money = (v) => (s.masked ? '$•••' : usd(v))
-  const head = {
-    kept: '◆ kept warm',
-    warm: `● c ${minutes(st.left)}`,
-    cooling: `◐ c ${minutes(st.left)}`,
-    cold: `○ c cold ${minutes(-st.left)}`,
-    unknown: '○ c –',
+  const [head, color] = {
+    kept: ['◆ kept warm', 'cyan'],
+    warm: [`● c ${minutes(st.left)}`, 'green'],
+    cooling: [`◐ c ${minutes(st.left)}`, 'yellow'],
+    cold: [`○ c cold ${minutes(-st.left)}`, coldBig ? 'red' : 'dim'],
+    unknown: ['○ c –', 'dim'],
   }[st.kind]
-  const parts = [head, `ctx ${tokens(s.ctx)}`, `rwc ≈ ${money(s.rewriteUsd)}`, `sc ${money(s.costUsd)}`]
+  const segments = [
+    { key: 'cache', text: head, color },
+    { key: 'ctx', text: `ctx ${tokens(s.ctx)}`, color: null },
+    { key: 'rwc', text: `rwc ≈ ${money(s.rewriteUsd)}`, color: coldBig ? 'red' : null },
+    { key: 'sc', text: `sc ${money(s.costUsd)}`, color: null },
+  ]
   const limits = s.rateLimits || []
-  if (limits.length) parts.push(limitsText(limits))
-  const top = Math.max(0, ...limits.map((l) => l.percentUsed || 0))
-  let tone = 'normal'
-  if (st.kind === 'cooling' || top >= 80) tone = 'warning'
-  if ((st.kind === 'cold' && big) || top >= 95) tone = 'error'
-  return { text: parts.join(' │ '), tone, state: st }
+  if (limits.length) {
+    const top = Math.max(0, ...limits.map((l) => l.percentUsed || 0))
+    segments.push({ key: 'limits', text: limitsText(limits), color: top >= 95 ? 'red' : top >= 80 ? 'yellow' : null })
+  }
+  return { text: segments.map((g) => g.text).join(' · '), segments, state: st }
 }
 
 function tooltip(s, now) {
@@ -179,4 +216,4 @@ function writeCommand(dir, id, cmd, now) {
   fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify({ cmd, at: now }))
 }
 
-module.exports = { readLive, readVscodeSessions, pickSession, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }
+module.exports = { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }
