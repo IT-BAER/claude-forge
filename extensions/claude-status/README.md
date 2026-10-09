@@ -2,6 +2,9 @@
 
 The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods cannot draw above the prompt in the VS Code chat, so this extension shows the same values in the VS Code status bar.
 
+> [!IMPORTANT]
+> This extension does nothing on its own. It has no data source of its own and only shows what the **cache-status mod** writes. Installed without the mod, the status bar stays empty. Install the mod first (see [Requirements](#requirements)). Claude Desktop is not needed: the mod runs inside the Claude Code process that the VS Code chat starts.
+
 <img src="screenshots/statusbar.png" alt="Claude Status in the VS Code status bar" width="686">
 
 *The status bar under the VS Code chat: cache warm for 46 minutes, 276k tokens in context, a cold rewrite would cost about $2.21, the session cost $8.92 so far, the 5-hour plan limit at 92 %, and the handoff button ready to clear and continue.*
@@ -28,12 +31,19 @@ Hover a part for the explanations. Click it, or run **Claude Status: Show All Se
 
 ## Requirements
 
-- The cache-status mod, at a version that writes live files (`~/.claude/mods-data/cache-status/live/`). Update it with `/plugin marketplace update claude-forge`, then start a new session.
+- The cache-status mod, at a version that writes live files (`~/.claude/mods-data/cache-status/live/`). Install it in Claude Code:
+
+  ```
+  /plugin marketplace add IT-BAER/claude-forge
+  /plugin install cache-status@claude-forge
+  ```
+
+  Update it with `/plugin marketplace update claude-forge`. A mod install or update reaches a chat only after you restart that chat.
 - The status bar shows the session whose working directory is a folder of this VS Code window. A session started from the VS Code extension wins over a terminal or Desktop session in the same folder.
 
 ## Install
 
-There is no Marketplace listing. Build and install the .vsix:
+Install the cache-status mod first (see [Requirements](#requirements)). There is no Marketplace listing. Build and install the .vsix:
 
 ```
 cd extensions/claude-status

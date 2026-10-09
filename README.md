@@ -15,7 +15,7 @@ A mod adds a pane, a band or a command to Claude Code itself.
 
 | Extension | What it does |
 | --- | --- |
-| [`claude-status`](extensions/claude-status) | The `cache-status` values in the VS Code status bar, because mods cannot draw above the prompt in the VS Code chat. Needs the `cache-status` mod. Install from a built .vsix. |
+| [`claude-status`](extensions/claude-status) | The `cache-status` values in the VS Code status bar, because mods cannot draw above the prompt in the VS Code chat. **Does nothing without the `cache-status` mod**: install the mod first, then the extension from a built .vsix. |
 
 ## Skills
 
