@@ -459,6 +459,7 @@ async function followSessionId($) {
   S.lastActivity = 0
   S.keepWarm = false
   H.armed = false
+  H.file = H.lastFile = '' // the previous chat's handoff file is not this chat's
   await restoreSession($)
 }
 

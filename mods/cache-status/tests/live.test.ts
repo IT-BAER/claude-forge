@@ -90,6 +90,24 @@ test('continue without a ready handoff does not clear', async ($, on) => {
   expect(ran).not.toContain('clear')
 })
 
+test('the chat after clear and continue does not take over the previous chat\'s handoff', async ($, on) => {
+  const handoff = '<!-- handoff: 2026-10-09T20:45:45+02:00 | session: sess-1 | status: active -->\n' + 'x'.repeat(300)
+  let messages: any[] = [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 't1', tool: 'Write', input: { file_path: 'D:\\p\\.claude\\session-handoff.md', content: '...' } }] }]
+  const { files, ran, clock, live, sid } = await start($, on, (on) => {
+    on('session.messages', () => ({ value: messages }))
+    on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
+  }, { 'D:/p/.claude/session-handoff.md': handoff })
+  expect(live().handoff).toBe('ready')
+  files[CMD] = JSON.stringify({ cmd: 'continue', at: NOW })
+  await clock.advance(2000)
+  expect(ran).toContain('clear')
+  await $.session.end({ reason: 'clear', sessionId: 'sess-1' } as any)
+  sid.value = 'sess-2'
+  messages = [{ role: 'user', text: 'Continue from session handoff: read D:/p/.claude/session-handoff.md', toolUses: [] }]
+  await clock.advance(2000)
+  expect(live('sess-2').handoff).toBe('idle')
+})
+
 // A reopened chat is a process started with --resume: only session.start fires
 test('a resumed chat restores context, cost, cache time and a ready handoff', async ($, on) => {
   const transcript = [
