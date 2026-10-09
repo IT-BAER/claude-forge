@@ -12,6 +12,8 @@ The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods c
 | `sc` | Session cost so far, at API list prices. |
 | `5h`, `w` | 5-hour and weekly plan limits used. Yellow at 80 %, red at 95 %. |
 
+Next to it sits the band's handoff button. It shows `handoff`, then `handoff queued` and `handoff running` while the session-handoff skill runs, then `clear and continue` once the handoff is ready, and `clearing` while the chat clears. Click `handoff` or `clear and continue` to run that step in the chat, as the band buttons do. The click writes a command file to `~/.claude/mods-data/cache-status/commands/`. The mod picks it up within 2 seconds.
+
 Hover the item for the explanations. Click it, or run **Claude Status: Show All Sessions**, for every live Claude Code session on this machine, in /board order.
 
 ## Requirements
@@ -26,12 +28,12 @@ There is no Marketplace listing. Build and install the .vsix:
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.1.0.vsix
+code --install-extension claude-status-0.2.0.vsix
 ```
 
 ## How it works
 
-The mod writes one JSON file per session on each heartbeat (about every 30 seconds, and after every turn). The extension reads that folder every 5 seconds. Files of ended sessions, and files older than 60 minutes, are ignored. Nothing leaves your machine.
+The mod writes one JSON file per session on each heartbeat (about every 30 seconds, and after every turn). The extension reads that folder every 2 seconds. Files of ended sessions, and files older than 60 minutes, are ignored. Nothing leaves your machine.
 
 ## License
 

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, boardItems } = require('../status')
+const { readLive, pickSession, render, boardItems, handoffItem, writeCommand } = require('../status')
 
 const MIN = 60000
 const NOW = 10_000_000_000
@@ -82,4 +82,24 @@ test('board lists waiting first, then working, then by cache time left', () => {
     hb({ id: 'wait', state: 'waiting' }),
   ], NOW)
   assert.deepEqual(items.map((i) => i.id), ['wait', 'work', 'idle-late', 'idle-fresh'])
+})
+
+test('handoff item follows the mod state like the band button', () => {
+  assert.deepEqual(handoffItem(hb({ handoff: 'idle' })), { text: 'handoff', cmd: 'handoff' })
+  assert.deepEqual(handoffItem(hb({})), { text: 'handoff', cmd: 'handoff' })
+  assert.deepEqual(handoffItem(hb({ handoff: 'queued' })), { text: 'handoff queued', cmd: null })
+  assert.deepEqual(handoffItem(hb({ handoff: 'running' })), { text: '$(sync~spin) handoff running', cmd: null })
+  assert.deepEqual(handoffItem(hb({ handoff: 'ready' })), { text: 'clear and continue', cmd: 'continue' })
+  assert.deepEqual(handoffItem(hb({ handoff: 'clearing' })), { text: '$(sync~spin) clearing', cmd: null })
+})
+
+test('writeCommand leaves one command file per session for the mod', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-status-'))
+  try {
+    writeCommand(path.join(dir, 'commands'), 'sess-1', 'continue', NOW)
+    const c = JSON.parse(fs.readFileSync(path.join(dir, 'commands', 'sess-1.json'), 'utf8'))
+    assert.deepEqual(c, { cmd: 'continue', at: NOW })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

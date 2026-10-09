@@ -1,30 +1,61 @@
 const vscode = require('vscode')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, tooltip, boardItems } = require('./status')
+const { readLive, pickSession, render, tooltip, boardItems, handoffItem, writeCommand } = require('./status')
 
-const LIVE_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'cache-status', 'live')
-const REFRESH_MS = 5000
+const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'cache-status')
+const LIVE_DIR = path.join(DATA_DIR, 'live')
+const COMMAND_DIR = path.join(DATA_DIR, 'commands')
+const REFRESH_MS = 2000
+const PENDING_MS = 15000 // how long a click shows its own label before the mod answers
 const TONE_BG = { warning: 'statusBarItem.warningBackground', error: 'statusBarItem.errorBackground' }
 
 function activate(context) {
-  const item = vscode.window.createStatusBarItem('claudeStatus.item', vscode.StatusBarAlignment.Left, 100)
+  // Right side, low priority: next to the edge, under the chat panel. Lower sits further right.
+  const item = vscode.window.createStatusBarItem('claudeStatus.item', vscode.StatusBarAlignment.Right, -100)
   item.name = 'Claude Status'
   item.command = 'claudeStatus.showSessions'
+  const handoff = vscode.window.createStatusBarItem('claudeStatus.handoff', vscode.StatusBarAlignment.Right, -101)
+  handoff.name = 'Claude Status Handoff'
+
+  let session // the session shown, for the handoff click
+  let pending // { id, from, text, until }: a click the mod has not answered yet
 
   const refresh = () => {
     const now = Date.now()
     const folders = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath)
-    const s = pickSession(readLive(LIVE_DIR, now), folders)
-    if (!s) {
+    session = pickSession(readLive(LIVE_DIR, now), folders)
+    if (!session) {
       item.hide()
+      handoff.hide()
       return
     }
-    const r = render(s, now)
+    const r = render(session, now)
     item.text = r.text
-    item.tooltip = new vscode.MarkdownString(tooltip(s, now))
+    item.tooltip = new vscode.MarkdownString(tooltip(session, now))
     item.backgroundColor = TONE_BG[r.tone] ? new vscode.ThemeColor(TONE_BG[r.tone]) : undefined
     item.show()
+
+    if (pending && (pending.id !== session.id || (session.handoff || 'idle') !== pending.from || now > pending.until)) pending = undefined
+    const h = handoffItem(session)
+    handoff.text = pending ? pending.text : h.text
+    handoff.command = !pending && h.cmd ? 'claudeStatus.handoffAction' : undefined
+    handoff.tooltip = h.cmd === 'continue' ? 'Clear this chat and continue from the handoff' : h.cmd ? 'Run /session-handoff in this chat' : undefined
+    handoff.show()
+  }
+
+  const handoffAction = () => {
+    if (!session) return
+    const h = handoffItem(session)
+    if (!h.cmd) return
+    try {
+      writeCommand(COMMAND_DIR, session.id, h.cmd, Date.now())
+    } catch (err) {
+      vscode.window.showErrorMessage(`Claude Status: could not send the command: ${err.message}`)
+      return
+    }
+    pending = { id: session.id, from: session.handoff || 'idle', text: h.cmd === 'continue' ? '$(sync~spin) clearing' : 'handoff queued', until: Date.now() + PENDING_MS }
+    refresh()
   }
 
   const showSessions = async () => {
@@ -39,8 +70,10 @@ function activate(context) {
   const timer = setInterval(refresh, REFRESH_MS)
   context.subscriptions.push(
     item,
+    handoff,
     { dispose: () => clearInterval(timer) },
     vscode.commands.registerCommand('claudeStatus.showSessions', showSessions),
+    vscode.commands.registerCommand('claudeStatus.handoffAction', handoffAction),
     vscode.workspace.onDidChangeWorkspaceFolders(refresh),
   )
   refresh()

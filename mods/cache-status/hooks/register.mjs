@@ -14,6 +14,7 @@ import { makeMasker } from './privacy.mjs'
 
 const MIN = 60000
 const HEARTBEAT_EVERY = 30000
+const OUTSIDE_EVERY = 2000 // command files and handoff state for the VS Code extension
 const PANE = 'cache-board'
 
 // This session
@@ -58,6 +59,9 @@ const alerted = new Map() // sessionId -> state or warning key already announced
 let paneOpen = false
 let justCompacted = false
 let handoffPending = false
+let lastLiveHandoff = '' // handoff state in the last live file
+let lastCommandAt = 0 // newest command file already taken
+let outsideBusy = false
 
 // The handoff flow. When /session-handoff runs (the band's button, /handoff, a
 // typed command, or Claude calling the skill), the answer of the turn it starts
@@ -379,10 +383,56 @@ async function writeLive($, hb, ended) {
     } catch {
       // surfaces unavailable: the reader falls back to matching the cwd
     }
-    const live = { ...hb, surfaces, rateLimits: S.rateLimits, rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, ended }
-    await $.fs.write(`${home}/.claude/mods-data/cache-status/live/${hb.id}.json`.replace(/\\/g, '/'), JSON.stringify(live))
+    lastLiveHandoff = handoffState()
+    const live = { ...hb, surfaces, rateLimits: S.rateLimits, rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, ended }
+    await $.fs.write(outsidePath('live', hb.id), JSON.stringify(live))
   } catch {
     // a failed write only leaves the outside readers stale
+  }
+}
+
+function outsidePath(dir, id) {
+  return `${home}/.claude/mods-data/cache-status/${dir}/${id}.json`.replace(/\\/g, '/')
+}
+
+// What the band's handoff button shows, in the order the band picks it
+function handoffState() {
+  if (H.continuing) return 'clearing'
+  if (H.text) return 'ready'
+  if (handoffPending) return 'queued'
+  if (H.armed) return 'running'
+  return 'idle'
+}
+
+// The VS Code extension's handoff buttons: one command file per session, marked
+// done instead of deleted. Old commands are dropped so a reload never replays one.
+async function applyFileCommand($) {
+  const path = outsidePath('commands', S.id)
+  let c
+  try {
+    if (!(await $.fs.exists(path))) return
+    c = JSON.parse(await $.fs.read(path))
+  } catch {
+    return
+  }
+  if (!c || c.doneAt || !c.at || c.at <= lastCommandAt) return
+  lastCommandAt = c.at
+  await $.fs.write(path, JSON.stringify({ ...c, doneAt: now }))
+  if (now - c.at > 30000) return
+  // not awaited: a queued handoff waits for the turn to end
+  if (c.cmd === 'handoff') runHandoff($).catch(() => {})
+  else if (c.cmd === 'continue') clearAndContinue($).catch(() => {})
+}
+
+async function outsideStep($) {
+  if (!home || !S.id || outsideBusy) return
+  outsideBusy = true
+  try {
+    now = await $.clock.now()
+    await applyFileCommand($)
+    if (handoffState() !== lastLiveHandoff) await heartbeat($, true)
+  } finally {
+    outsideBusy = false
   }
 }
 
@@ -530,6 +580,7 @@ export function register(on) {
     names.board = (await registerCommand($, 'board', 'Every local Claude Code session: state, context, cache, cost', '', true)) || names.board
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
+    $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
     await heartbeat($, true)
     return next(e)
   })

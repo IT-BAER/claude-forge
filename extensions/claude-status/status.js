@@ -134,4 +134,22 @@ function boardItems(list, now) {
     }))
 }
 
-module.exports = { readLive, pickSession, render, tooltip, boardItems, cacheState }
+// The band's handoff button: label per mod state, and the command a click sends
+const HANDOFF = {
+  idle: { text: 'handoff', cmd: 'handoff' },
+  queued: { text: 'handoff queued', cmd: null },
+  running: { text: '$(sync~spin) handoff running', cmd: null },
+  ready: { text: 'clear and continue', cmd: 'continue' },
+  clearing: { text: '$(sync~spin) clearing', cmd: null },
+}
+
+function handoffItem(s) {
+  return { ...(HANDOFF[s.handoff] || HANDOFF.idle) }
+}
+
+function writeCommand(dir, id, cmd, now) {
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify({ cmd, at: now }))
+}
+
+module.exports = { readLive, pickSession, render, tooltip, boardItems, cacheState, handoffItem, writeCommand }
