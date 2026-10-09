@@ -154,3 +154,43 @@ test('consuming a handoff through the skill does not turn the answer into a new 
   expect(live().handoff).toBe('idle')
   expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
 })
+
+test('a handoff the skill writes to a file is ready', async ($, on) => {
+  const { files, live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+  })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Skill', skill: 'session-handoff' } as any)
+  await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'Handoff written.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('ready')
+})
+
+test('a resume turn that calls the skill but never edits the file saves no handoff', async ($, on) => {
+  const { files, live } = await start($, on, (on) => {
+    on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', () => ({ result: { text: '' } }))
+  }, { [HF]: handoffFile('active') })
+  await $.prompt.submit({ text: `Continue from session handoff: read ${HF}, consume it with session-handoff, do not re-explore.`, origin: { kind: 'composer' } } as any)
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Skill', skill: 'session-handoff' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'The read was blocked. '.repeat(20), durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('idle')
+  expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
+})
+
+test('a denied edit of a handoff file is not a handoff write', async ($, on) => {
+  const { live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', () => ({ deny: 'sensitive file' }))
+  }, { [HF]: handoffFile('active') })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: HF, old_string: 'status: active', new_string: 'status: consumed' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'The edit was denied.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('idle')
+})

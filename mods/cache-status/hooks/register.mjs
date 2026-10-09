@@ -79,7 +79,9 @@ const H = {
   lastFile: '', // the last handoff file written this session: the fallback when a handoff turn ends on a short answer
   fromFile: false, // H.text came from that file: the fresh chat reads it by path
   continuing: false,
+  resuming: false, // the last prompt was a resume line: its skill call consumes, not creates
 }
+const RESUME_LINE = /^\s*Continue from session handoff:/i
 
 // session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
 const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)[^"'\s/]*\.md|\/handoffs\/[^"'\s]*\.md)/
@@ -695,6 +697,7 @@ export function register(on) {
   on('prompt.submit', async ($, e, next) => {
     now = await $.clock.now()
     await followSessionId($) // a prompt right after /clear: the new chat before its first request
+    H.resuming = RESUME_LINE.test(String(e.text || ''))
     if (S.label === basename(S.cwd) && e.origin && e.origin.kind === 'composer' && e.text) {
       S.label = basename(S.cwd) + ' · ' + clip(e.text, 40)
     }
@@ -835,15 +838,17 @@ export function register(on) {
   on('tool.call', async ($, e, next) => {
     if (!e.agentId) S.tool = e.tool
     // Claude calling the handoff skill itself: this turn's answer is the handoff
-    if (!e.agentId && e.tool === 'Skill' && HANDOFF_SKILL.test(String(e.skill || ''))) armHandoff(true)
-    if (!e.agentId) noteHandoffFile(e)
+    if (!e.agentId && e.tool === 'Skill' && HANDOFF_SKILL.test(String(e.skill || '')) && !H.resuming) armHandoff(true)
     if (e.tool === 'AskUserQuestion') {
       now = await $.clock.now()
       S.waitingSince = now
       S.waitingFor = 'a question'
     }
     try {
-      return await next(e)
+      const r = await next(e)
+      // a denied or failed write left the file as it was
+      if (!e.agentId && r && !r.deny && !r.isError) noteHandoffFile(e)
+      return r
     } finally {
       if (S.waitingSince) {
         S.waitingSince = 0
