@@ -4,7 +4,7 @@ A compact prompt-cache status band for Claude Code, with a cold-send guard, keep
 
 This is a fork of **Cache Keeper** by Nate Herk ([nateherkai/claude-code-mods](https://github.com/nateherkai/claude-code-mods)), MIT licensed. The cache logic, board, guard and handoff flow are his work. See [Changes from Cache Keeper](#changes-from-cache-keeper) for what this fork adds.
 
-<img src="screenshots/band.png" alt="cache-status band above the prompt" width="640">
+<img src="screenshots/band.png" alt="cache-status band above the prompt" width="686">
 
 *The band above the prompt: cache warm for 60 minutes, 342k tokens in context, a cold rewrite would cost about $2.73, the session cost $13 so far, and the 5-hour and weekly plan limits.*
 

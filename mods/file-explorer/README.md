@@ -2,7 +2,7 @@
 
 A VS Code style file explorer for Claude Code. It opens a pane with the file tree of your session's working directory, previews files, and lets you edit and save them without leaving the session.
 
-<img src="screenshots/file-tree.png" alt="File tree of a project folder" width="330">
+<img src="screenshots/file-tree.png" alt="File tree of a project folder" width="376">
 
 *The pane on a project folder. Folders come first, ignored entries such as `node_modules` are dimmed, and the search box, refresh and collapse buttons sit at the top.*
 
@@ -79,7 +79,7 @@ Type `/files` to open the pane. Type it again to close it.
 - Click a file to select it. Double-click opens the preview. Ctrl+click adds an `@path` mention to your prompt.
 - Click the … at the end of a row for a popup menu (a click outside the pane hides it): Open, Add to prompt, Rename, Duplicate, Delete (to the Recycle Bin, after a confirm), Copy path, Copy relative path, Reveal in File Explorer. Folders also offer New file and New folder.
 
-<img src="screenshots/context-menu.png" alt="Row menu" width="260">
+<img src="screenshots/context-menu.png" alt="Row menu" width="305">
 
 *The … menu of a row. Open and Add to prompt come first, then Rename, Duplicate and Delete, then the copy and reveal actions.*
 
@@ -91,7 +91,7 @@ Type `/files` to open the pane. Type it again to close it.
 
 ### Editor
 
-<img src="screenshots/file-editor.png" alt="Editor with syntax colours" width="560">
+<img src="screenshots/file-editor.png" alt="Editor with syntax colours" width="606">
 
 *Editing `CHANGELOG.md`. The status line shows the caret position, encoding and line ending. Headings, links and inline code have their own colours, and wrapped list lines keep an indent guide.*
 

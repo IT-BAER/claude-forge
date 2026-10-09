@@ -2,7 +2,7 @@
 
 The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods cannot draw above the prompt in the VS Code chat, so this extension shows the same values in the VS Code status bar.
 
-<img src="screenshots/statusbar.png" alt="Claude Status in the VS Code status bar" width="640">
+<img src="screenshots/statusbar.png" alt="Claude Status in the VS Code status bar" width="686">
 
 *The status bar under the VS Code chat: cache warm for 46 minutes, 276k tokens in context, a cold rewrite would cost about $2.21, the session cost $8.92 so far, the 5-hour plan limit at 92 %, and the handoff button ready to clear and continue.*
 
