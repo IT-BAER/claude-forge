@@ -97,15 +97,28 @@ function noteHandoffFile(e) {
   if (m) H.file = H.lastFile = m[0]
 }
 
+// A header status other than active (consumed) retires a handoff file.
+// Free-hand handoffs often lack the skill's <!-- handoff: --> header.
+function retired(text) {
+  const status = /status:\s*(\w+)/i.exec(text.split('\n', 3).join('\n'))
+  return !!status && status[1].toLowerCase() !== 'active'
+}
+
+async function fileRetired($, path) {
+  try {
+    return !(await $.fs.exists(path)) || retired(await $.fs.read(path))
+  } catch {
+    return false
+  }
+}
+
 // A handoff file becomes the ready handoff unless its header retires it
-// (status: consumed). Free-hand handoffs often lack the skill's <!-- handoff: --> header.
 async function captureHandoffFile($, path = H.file) {
   H.file = ''
   try {
     if (!path || !(await $.fs.exists(path))) return false
     const text = (await $.fs.read(path)).replace(/^﻿/, '')
-    const status = /status:\s*(\w+)/i.exec(text.split('\n', 3).join('\n'))
-    if (text.trim().length < 200 || (status && status[1].toLowerCase() !== 'active')) return false
+    if (text.trim().length < 200 || retired(text)) return false
     const askAfter = H.askAfter
     H.text = text.trim()
     H.path = path
@@ -504,6 +517,13 @@ async function outsideStep($) {
     await followSessionId($)
     if (!S.id) return
     await applyFileCommand($)
+    // another chat consumed (or removed) the ready handoff's file
+    if (H.text && H.fromFile && !H.continuing && (await fileRetired($, H.path))) {
+      H.text = ''
+      H.path = ''
+      H.fromFile = false
+      $.ui.invalidate('ui.render')
+    }
     if (handoffState() !== lastLiveHandoff) await heartbeat($, true)
   } finally {
     outsideBusy = false
@@ -773,8 +793,14 @@ export function register(on) {
     } catch {
       // usage unavailable: keep the per-request figures
     }
-    if (H.file && (await captureHandoffFile($))) {
+    const wrote = H.file
+    if (wrote && (await captureHandoffFile($))) {
       // the file is the handoff; the turn's answer is only its summary
+    } else if (wrote && (await fileRetired($, wrote))) {
+      // the turn consumed a handoff: its answer is not a new one
+      H.armed = false
+      H.notTurn = ''
+      H.askAfter = false
     } else if (H.armed && e.turnId !== H.notTurn) await captureHandoff($, e)
     await heartbeat($, true)
     $.ui.invalidate('ui.render')

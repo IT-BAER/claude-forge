@@ -127,3 +127,30 @@ test('a resumed chat restores context, cost, cache time and a ready handoff', as
   expect(live().lastActivity).toBe(NOW - 8 * 60000)
   expect(live().handoff).toBe('ready')
 })
+
+const HF = 'D:/p/.claude/session-handoff.md'
+const handoffFile = (status: string) => `<!-- handoff: 2026-10-09T20:45:45+02:00 | session: sess-0 | status: ${status} -->\n` + 'x'.repeat(300)
+
+test('a ready handoff whose file another chat consumed is no longer ready', async ($, on) => {
+  const { files, clock, live } = await start($, on, (on) => {
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: '', toolUses: [{ tool_use_id: 't1', tool: 'Write', input: { file_path: HF, content: '...' } }] }] }))
+  }, { [HF]: handoffFile('active') })
+  expect(live().handoff).toBe('ready')
+  files[HF] = handoffFile('consumed')
+  await clock.advance(2000)
+  expect(live().handoff).toBe('idle')
+})
+
+test('consuming a handoff through the skill does not turn the answer into a new handoff', async ($, on) => {
+  const { files, live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Edit') files[HF] = handoffFile('consumed'); return { result: { text: '' } } })
+  }, { [HF]: handoffFile('active') })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Skill', skill: 'session-handoff' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: HF, old_string: 'status: active', new_string: 'status: consumed' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'Handoff consumed. '.repeat(30), durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('idle')
+  expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
+})
