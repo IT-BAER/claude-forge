@@ -171,6 +171,25 @@ function render(s, now) {
   return { text: segments.map((g) => g.text).join(' · '), segments, state: st }
 }
 
+function clock(ts) {
+  const d = new Date(ts)
+  const h = d.getHours()
+  return (h % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0') + (h >= 12 ? 'pm' : 'am')
+}
+
+// When each window resets: "5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)", as in the band
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+function resetsText(limits, now) {
+  const DAY = 24 * 60 * MIN
+  return limits.filter((l) => l.resetsAt).map((l) => {
+    const t = Date.parse(l.resetsAt)
+    const left = t - now
+    const day = left >= DAY ? DAYS[new Date(t).getDay()] + ' ' : ''
+    const span = left <= 0 ? 'due' : left >= DAY ? `in ${Math.floor(left / DAY)}d${Math.floor((left % DAY) / (60 * MIN))}h` : `in ${minutes(left)}`
+    return `${LIMIT_LABEL[l.kind] || l.kind} resets ${day}${clock(t)} (${span})`
+  }).join(' · ')
+}
+
 function tooltip(s, now) {
   const st = cacheState(s, now)
   const ttl = s.ttlMin || 60
@@ -184,6 +203,8 @@ function tooltip(s, now) {
     'sc: session cost so far, at API list prices',
   ]
   if ((s.rateLimits || []).length) lines.push(`plan limits used: ${limitsText(s.rateLimits)}`)
+  const resets = resetsText(s.rateLimits || [], now)
+  if (resets) lines.push(resets)
   lines.push('', `updated ${minutes(now - (s.updatedAt || now))} ago · click for all sessions`)
   return lines.join('  \n')
 }

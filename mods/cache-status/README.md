@@ -39,7 +39,7 @@ Start a new session afterwards.
 | `sc` | Session cost so far, at API list prices. |
 | `5h`, `w` | 5-hour and weekly plan limits used. Yellow at 80 %, red at 95 %. |
 
-Hover `c`, `rwc` or `sc` for a one-line explanation above the band. On a subscription the prices show up as usage against your limits, not as a bill.
+Hover `c`, `rwc` or `sc` for a one-line explanation above the band. Hover the plan limits for when each window resets: `5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)`. On a subscription the prices show up as usage against your limits, not as a bill.
 
 ## Commands
 

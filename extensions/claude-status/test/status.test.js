@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups, modMissing } = require('../status')
+const { readLive, pickSession, render, tooltip, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups, modMissing } = require('../status')
 
 const MIN = 60000
 const NOW = 10_000_000_000
@@ -176,4 +176,13 @@ test('the mod counts as missing until it has written a live file', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('the tooltip says when each plan limit window resets', () => {
+  const at = (m) => new Date(NOW + m * MIN).toISOString()
+  const s = hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: at(135) }, { kind: 'seven_day', percentUsed: 24, resetsAt: at((3 * 24 + 21) * 60) }] })
+  const lines = tooltip(s, NOW).split('  \n')
+  assert.ok(lines.includes('plan limits used: 5h 40% · w 24%'))
+  assert.ok(lines.some((l) => /^5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/.test(l)), lines.join('\n'))
+  assert.ok(!tooltip(hb(), NOW).includes('resets'))
 })

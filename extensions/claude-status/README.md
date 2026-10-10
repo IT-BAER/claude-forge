@@ -27,7 +27,7 @@ Plan limits belong to the account, not to one chat. The extension shows the high
 
 At the end sits the band's handoff button. It shows `handoff`, then `handoff queued` and `handoff running` while the session-handoff skill runs, then `clear and continue` once the handoff is ready, and `clearing` while the chat clears. Click `handoff` or `clear and continue` to run that step in the chat, as the band buttons do. The click writes a command file to `~/.claude/mods-data/cache-status/commands/`. The mod picks it up within 2 seconds.
 
-Hover a part for the explanations. Click it, or run **Claude Status: Show All Sessions**, for every live Claude Code session on this machine, in /board order.
+Hover a part for the explanations and for when each plan limit resets (`5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)`). Click it, or run **Claude Status: Show All Sessions**, for every live Claude Code session on this machine, in /board order.
 
 ## Requirements
 
@@ -48,7 +48,7 @@ Install the cache-status mod first (see [Requirements](#requirements)). There is
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.9.vsix
+code --install-extension claude-status-0.2.10.vsix
 ```
 
 Then run **Developer: Reload Window**.

@@ -2,7 +2,7 @@
   "name": "claude-status",
   "displayName": "Claude Status",
   "description": "Prompt cache, context, cost and plan limits of your Claude Code session in the VS Code status bar. Requires the cache-status mod (claude-forge).",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "publisher": "IT-BAER",
   "icon": "images/icon.png",
   "license": "MIT",

@@ -219,3 +219,24 @@ test('a denied edit of a handoff file is not a handoff write', async ($, on) => 
   await $.turn.complete({ reason: 'answer', answer: 'The edit was denied.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
   expect(live().handoff).toBe('idle')
 })
+test('hovering the plan limits shows when each window resets', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  const limits = [
+    { kind: 'five_hour', percentUsed: 48, resetsAt: new Date(NOW + 135 * 60000).toISOString() },
+    { kind: 'seven_day', percentUsed: 24, resetsAt: new Date(NOW + (3 * 24 + 21) * 60 * 60000).toISOString() },
+  ]
+  await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: limits, cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+    const drawn = all(await ui.drawn())
+    expect(drawn.find((n) => n.type === 'Text' && /5h 48% · w 24%/.test(String(n.children)))?.hover?.scope).toBe('ck-limits')
+    const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
+    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/)
+    await ui.unmount()
+  }
+})

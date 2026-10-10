@@ -290,6 +290,18 @@ function limitsText(limits) {
   return limits.map((l) => `${LIMIT_LABEL[l.kind] || l.kind} ${Math.round(l.percentUsed)}%`).join(' · ')
 }
 
+// When each window resets: "5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)"
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+function resetsText(limits, at) {
+  return limits.filter((l) => l.resetsAt).map((l) => {
+    const t = Date.parse(l.resetsAt)
+    const left = t - at
+    const day = left >= 24 * 60 * MIN ? DAYS[new Date(t).getDay()] + ' ' : ''
+    const span = left <= 0 ? 'due' : left >= 24 * 60 * MIN ? `in ${Math.floor(left / (24 * 60 * MIN))}d${Math.floor((left % (24 * 60 * MIN)) / (60 * MIN))}h` : `in ${minutes(left)}`
+    return `${LIMIT_LABEL[l.kind] || l.kind} resets ${day}${clock(t)} (${span})`
+  }).join(' · ')
+}
+
 function limitTone(limits, extra) {
   const top = Math.max(...limits.map((l) => l.percentUsed || 0))
   if (top >= 95) return { ...extra, color: 'red', bold: true }
@@ -952,7 +964,7 @@ export function register(on) {
     else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` │ rwc ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
     parts.push(Text({ dimColor: true, hover: tip('ck-sc'), children: [` │ sc ${money(S.costUsd)}`] }))
     if (S.coldRestarts.length) parts.push(Text({ dimColor: true, children: [` │ ${S.coldRestarts.length} cold restart${S.coldRestarts.length === 1 ? '' : 's'} ${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}`] }))
-    if (S.rateLimits.length) parts.push(Text(limitTone(S.rateLimits, { children: [' │ ' + limitsText(S.rateLimits)] })))
+    if (S.rateLimits.length) parts.push(Text(limitTone(S.rateLimits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(S.rateLimits)] })))
     const row = [Box({ flexDirection: 'row', children: parts })]
     if (st.kind === 'cooling' && big) {
       row.push(Button({ key: 'keepwarm', label: 'keep warm', hotkey: '1', plain: true, onPress: async () => { now = await $.clock.now(); startKeepWarm($, settings.keepWarmHours); await heartbeat($, true); $.ui.invalidate('ui.render') } }))
@@ -978,6 +990,8 @@ export function register(on) {
       help('ck-rewrite', `rewrite: cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
       help('ck-sc', 'session cost: what this session has cost so far, at API list prices'),
     ]
+    const resets = resetsText(S.rateLimits, now)
+    if (resets) tips.push(help('ck-limits', 'plan limits: ' + resets))
     return Box({ flexDirection: 'column', children: below ? [...tips, mine, below] : [...tips, mine] })
   })
 
