@@ -19,7 +19,11 @@ A mod adds a pane, a band or a command to Claude Code itself.
 
 ## Skills
 
-A skill teaches Claude a repeatable task. No skills are published yet.
+A skill teaches Claude a repeatable task. Install a skill by copying its folder (see [Without the marketplace](#without-the-marketplace)).
+
+| Skill | What it does |
+| --- | --- |
+| [`session-handoff`](skills/session-handoff) | Writes the session state to `.claude/session-handoff.md` (12 fixed sections) so a fresh chat can continue, and consumes it in the next chat. The `cache-status` handoff button uses it when installed. |
 
 ## Install
 
