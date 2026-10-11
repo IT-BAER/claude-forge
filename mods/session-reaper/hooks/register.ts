@@ -19,9 +19,12 @@ function log($: Engine, text: string) {
   return $.ui.log(`session-reaper: ${text}`, { to: 'debug' })
 }
 
-function procs($: Engine, args: string[]) {
+// Absolute exe and the plugin's own folder as cwd: a bare name would also resolve from the session's folder.
+async function procs($: Engine, args: string[]) {
+  const root = (await $.env.get('SystemRoot')) ?? 'C:\\Windows'
+  const exe = `${root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
   const script = `${$.plugin.root}/hooks/procs.ps1`
-  return $.process.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...args], { timeoutMs: 60_000 })
+  return $.process.run([exe, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...args], { cwd: $.plugin.root, timeoutMs: 60_000 })
 }
 
 // shortcut: last writer wins on a simultaneous takeover; harmless, both act on the same state.

@@ -18,6 +18,8 @@ async function start($: any, on: any, w: World) {
   mock.store(on, w.store ?? {})
   const archived: string[] = []
   const killed: string[] = []
+  const runs: { exe: string; cwd?: string }[] = []
+  mock.env(on, { SystemRoot: String.raw`C:\Windows` })
   on('session.id', () => ({ value: w.id ?? 'me' }))
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('ui.log', () => ({ value: undefined }))
@@ -27,13 +29,14 @@ async function start($: any, on: any, w: World) {
     return { value: { isError: false, content: [{ type: 'text', text: 'Archived' }] } }
   })
   on('process.run', (_: any, e: any) => {
+    runs.push({ exe: e.argv[0], cwd: e.init?.cwd })
     const i = e.argv.indexOf('-Kill')
     if (i >= 0) killed.push(...String(e.argv[i + 1]).split(','))
     const stdout = i >= 0 ? '[]' : JSON.stringify(w.procs ?? [])
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   await $.session.start({ cwd: 'C:/work', surface: null, isInteractive: true })
-  return { clock, archived, killed, pids: () => killed.map(k => Number(k.split(':')[0])).sort((a, b) => a - b) }
+  return { clock, archived, killed, runs, pids: () => killed.map(k => Number(k.split(':')[0])).sort((a, b) => a - b) }
 }
 
 test('archives sessions idle past the limit, never running, pinned or recent ones', async ($, on) => {
@@ -111,4 +114,15 @@ test('a reused PID is not taken for a tracked process', async ($, on) => {
   w.procs = [row(11, 999, 'node.exe', 90)]
   await clock.advance(2 * TICK)
   expect(killed).toEqual([])
+})
+
+test('runs PowerShell by its System32 path, never from the session folder', async ($, on) => {
+  const { clock, runs } = await start($, on, { procs: [] })
+  await clock.advance(TICK)
+  expect(runs.length).toBeGreaterThan(0)
+  for (const r of runs) {
+    expect(r.exe).toBe(String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`)
+    expect(r.cwd).toBeDefined()
+    expect(r.cwd).not.toBe('C:/work')
+  }
 })
