@@ -7,6 +7,8 @@ const MIN = 60000
 const STALE_MS = 60 * MIN // the mod drops heartbeats older than this too
 const ALIVE_MS = 2 * MIN // a running session rewrites its file at least every 30 seconds
 const LIMIT_LABEL = { five_hour: '5h', seven_day: 'w', spend_limit: 'spend' }
+// a per-model weekly window from the mod takes its model's initial ("fw" for Fable)
+const limitLabel = (l) => LIMIT_LABEL[l.kind] || (l.model ? `${l.model[0].toLowerCase()}w` : l.kind)
 
 function tokens(n) {
   const v = Number(n) || 0
@@ -142,7 +144,7 @@ function cacheState(s, now) {
 }
 
 function limitsText(limits) {
-  return limits.map((l) => `${LIMIT_LABEL[l.kind] || l.kind} ${Math.round(l.percentUsed || 0)}%`).join(' · ')
+  return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed || 0)}%`).join(' · ')
 }
 
 // One segment per band part, each with the band's colour for it (null: plain)
@@ -186,7 +188,7 @@ function resetsText(limits, now) {
     const left = t - now
     const day = left >= DAY ? DAYS[new Date(t).getDay()] + ' ' : ''
     const span = left <= 0 ? 'due' : left >= DAY ? `in ${Math.floor(left / DAY)}d${Math.floor((left % DAY) / (60 * MIN))}h` : `in ${minutes(left)}`
-    return `${LIMIT_LABEL[l.kind] || l.kind} resets ${day}${clock(t)} (${span})`
+    return `${limitLabel(l)} resets ${day}${clock(t)} (${span})`
   }).join(' · ')
 }
 

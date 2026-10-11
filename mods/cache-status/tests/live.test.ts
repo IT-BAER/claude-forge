@@ -240,3 +240,44 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     await ui.unmount()
   }
 })
+
+test('per-model weekly windows (Fable) come from the usage endpoint into the band, hover and live file', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  const fableReset = new Date(NOW + ((2 * 24 + 5) * 60 + 1) * 60000 - 452).toISOString() // the server's reset is off the minute by milliseconds
+  const asked: any[] = []
+  const { clock, live } = await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 48, resetsAt: new Date(NOW + 135 * 60000).toISOString() }], cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('session.authorize', () => ({ value: { handle: 'h-1', kind: 'bearer' } }))
+    on('http.fetch', (_: any, e: any) => {
+      asked.push(e)
+      const limits = [
+        { kind: 'session', group: 'session', percent: 48, resets_at: '2026-10-11T10:30:00+00:00', scope: null },
+        { kind: 'weekly_scoped', group: 'weekly', percent: 33, resets_at: fableReset, scope: { model: { id: null, display_name: 'Fable' }, surface: null } },
+      ]
+      return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ five_hour: null, limits }) } }
+    })
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  await clock.advance(31000)
+  expect(asked.length).toBe(1)
+  expect(asked[0].url).toBe('https://api.anthropic.com/api/oauth/usage')
+  expect(asked[0].init.auth).toBe('h-1')
+  expect(live().rateLimits).toEqual([
+    { kind: 'five_hour', percentUsed: 48, resetsAt: new Date(NOW + 135 * 60000).toISOString() },
+    { kind: 'weekly_fable', model: 'Fable', percentUsed: 33, resetsAt: new Date(Math.round(Date.parse(fableReset) / 60000) * 60000).toISOString() },
+  ])
+  const ui = await $.ui.mount({ plugin: 'cache-status', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
+  const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+  const drawn = all(await ui.drawn())
+  expect(drawn.some((n) => n.type === 'Text' && /5h 48% · fw 33%/.test(String(n.children)))).toBe(true)
+  const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
+  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/)
+  await ui.unmount()
+  // within five minutes the endpoint is not asked again
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(asked.length).toBe(1)
+})

@@ -19,7 +19,7 @@ The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods c
 | `ctx` | Tokens in context. |
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. Red together with a cold big cache. |
 | `sc` | Session cost so far, at API list prices. |
-| `5h`, `w` | 5-hour and weekly plan limits used. Yellow at 80 %, red at 95 %. |
+| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. |
 
 Only the part that needs attention takes a colour, as in the band. The section sits left of every other item on the right side of the status bar, between two dim bars, so it does not run into the items of other extensions.
 
@@ -48,7 +48,7 @@ Install the cache-status mod first (see [Requirements](#requirements)). There is
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.10.vsix
+code --install-extension claude-status-0.2.11.vsix
 ```
 
 Then run **Developer: Reload Window**.

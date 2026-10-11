@@ -37,7 +37,7 @@ Start a new session afterwards.
 | `ctx` | Tokens in context. |
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. |
 | `sc` | Session cost so far, at API list prices. |
-| `5h`, `w` | 5-hour and weekly plan limits used. Yellow at 80 %, red at 95 %. |
+| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
 Hover `c`, `rwc` or `sc` for a one-line explanation above the band. Hover the plan limits for when each window resets: `5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)`. On a subscription the prices show up as usage against your limits, not as a bill.
 

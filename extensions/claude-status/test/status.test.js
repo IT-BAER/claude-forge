@@ -186,3 +186,14 @@ test('the tooltip says when each plan limit window resets', () => {
   assert.ok(lines.some((l) => /^5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/.test(l)), lines.join('\n'))
   assert.ok(!tooltip(hb(), NOW).includes('resets'))
 })
+
+test('a per-model weekly window (Fable) shows with its model name in the bar and tooltip', () => {
+  const at = (m) => new Date(NOW + m * MIN).toISOString()
+  const fable = { kind: 'weekly_fable', model: 'Fable', percentUsed: 33, resetsAt: at((2 * 24 + 5) * 60) }
+  const s = hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: at(135) }, fable] })
+  assert.ok(render(s, NOW).text.endsWith('5h 40% · fw 33%'), render(s, NOW).text)
+  const lines = tooltip(s, NOW).split('  \n')
+  assert.ok(lines.includes('plan limits used: 5h 40% · fw 33%'))
+  assert.ok(lines.some((l) => / · fw resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/.test(l)), lines.join('\n'))
+  assert.deepEqual(accountLimits([s, hb({ rateLimits: [{ ...fable, percentUsed: 35 }] })], NOW).find((l) => l.kind === 'weekly_fable').percentUsed, 35)
+})

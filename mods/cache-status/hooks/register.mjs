@@ -58,6 +58,8 @@ let fleet = [] // heartbeats of every session, this one included
 const alerted = new Map() // sessionId -> state or warning key already announced
 let paneOpen = false
 let justCompacted = false
+let modelLimits = [] // per-model weekly windows (Fable, ...) from the usage endpoint
+let usageAskedAt = -Infinity
 let handoffPending = false
 let lastLiveHandoff = '' // handoff state in the last live file
 let lastCommandAt = 0 // newest command file already taken
@@ -283,11 +285,13 @@ function ttlMin() {
   return settings.ttlMin || S.ttlMin
 }
 
-// Plan limit windows as the API reports them: five_hour, seven_day, spend_limit
+// Plan limit windows as the API reports them: five_hour, seven_day, spend_limit;
+// a per-model weekly window takes its model's initial ("fw" for Fable)
 const LIMIT_LABEL = { five_hour: '5h', seven_day: 'w', spend_limit: 'spend' }
+const limitLabel = (l) => LIMIT_LABEL[l.kind] || (l.model ? `${l.model[0].toLowerCase()}w` : l.kind)
 
 function limitsText(limits) {
-  return limits.map((l) => `${LIMIT_LABEL[l.kind] || l.kind} ${Math.round(l.percentUsed)}%`).join(' · ')
+  return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed)}%`).join(' · ')
 }
 
 // When each window resets: "5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)"
@@ -298,8 +302,42 @@ function resetsText(limits, at) {
     const left = t - at
     const day = left >= 24 * 60 * MIN ? DAYS[new Date(t).getDay()] + ' ' : ''
     const span = left <= 0 ? 'due' : left >= 24 * 60 * MIN ? `in ${Math.floor(left / (24 * 60 * MIN))}d${Math.floor((left % (24 * 60 * MIN)) / (60 * MIN))}h` : `in ${minutes(left)}`
-    return `${LIMIT_LABEL[l.kind] || l.kind} resets ${day}${clock(t)} (${span})`
+    return `${limitLabel(l)} resets ${day}${clock(t)} (${span})`
   }).join(' · ')
+}
+
+function allLimits() {
+  return [...S.rateLimits, ...modelLimits]
+}
+
+// The engine hands mods only five_hour, seven_day and spend_limit; per-model
+// weekly windows are rows of kind weekly_scoped in the usage endpoint's limits[].
+// Undocumented: a changed shape or failed request leaves the last rows.
+const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+const USAGE_EVERY = 5 * MIN
+
+async function refreshModelLimits($) {
+  if (now - usageAskedAt < USAGE_EVERY) return
+  usageAskedAt = now
+  try {
+    const auth = await $.session.authorize()
+    if (!auth || auth.kind !== 'bearer') return
+    const r = await $.http.fetch(USAGE_URL, { auth: auth.handle, headers: { 'anthropic-beta': 'oauth-2025-04-20' } })
+    if (!r.ok) return
+    const rows = JSON.parse(r.text).limits
+    if (!Array.isArray(rows)) return
+    modelLimits = rows
+      .filter((l) => l && l.kind === 'weekly_scoped' && typeof l.percent === 'number' && typeof l.scope?.model?.display_name === 'string')
+      .map((l) => {
+        const model = l.scope.model.display_name
+        const t = Date.parse(l.resets_at)
+        return { kind: 'weekly_' + model.toLowerCase(), model, percentUsed: l.percent, ...(t ? { resetsAt: new Date(Math.round(t / MIN) * MIN).toISOString() } : {}) }
+      })
+    $.ui.invalidate('ui.render')
+    await heartbeat($, true)
+  } catch {
+    // endpoint unavailable: keep the last rows
+  }
 }
 
 function limitTone(limits, extra) {
@@ -414,7 +452,7 @@ async function writeLive($, hb, ended) {
       // surfaces unavailable: the reader falls back to matching the cwd
     }
     lastLiveHandoff = handoffState()
-    const live = { ...hb, surfaces, rateLimits: S.rateLimits, rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, ended }
+    const live = { ...hb, surfaces, rateLimits: allLimits(), rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, ended }
     await $.fs.write(outsidePath('live', hb.id), JSON.stringify(live))
   } catch {
     // a failed write only leaves the outside readers stale
@@ -662,7 +700,7 @@ function statusText() {
   if (st.kind === 'warm' || st.kind === 'cooling') lines.push(`Cache is warm for about ${minutes(st.left)} more.`)
   if (st.kind === 'cold') lines.push(`Cache went cold ${minutes(-st.left)} ago. The next message rewrites it for about ${money(rewriteCost(S.ctx, S.model, ttl))}.`)
   if (S.keepWarm) lines.push(`Keep warm is on until ${clock(S.keepWarmUntil)}: ${S.pings} ping(s), ${money(S.pingUsd)} so far.`)
-  if (S.rateLimits.length) lines.push(`Plan limits used: ${limitsText(S.rateLimits)}.`)
+  if (allLimits().length) lines.push(`Plan limits used: ${limitsText(allLimits())}.`)
   lines.push(`Session cost so far: ${money(S.costUsd)}. Cold restarts this session: ${S.coldRestarts.length} (${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}).`)
   lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}.`)
   lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts [on|off] (no value toggles). Board: /${names.board}.`)
@@ -692,6 +730,7 @@ export function register(on) {
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
     $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
     await restoreSession($)
+    refreshModelLimits($).catch(() => {})
     return next(e)
   })
 
@@ -819,6 +858,7 @@ export function register(on) {
       H.notTurn = ''
       H.askAfter = false
     } else if (H.armed && e.turnId !== H.notTurn) await captureHandoff($, e)
+    refreshModelLimits($).catch(() => {})
     await heartbeat($, true)
     $.ui.invalidate('ui.render')
     return r
@@ -964,7 +1004,8 @@ export function register(on) {
     else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` │ rwc ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
     parts.push(Text({ dimColor: true, hover: tip('ck-sc'), children: [` │ sc ${money(S.costUsd)}`] }))
     if (S.coldRestarts.length) parts.push(Text({ dimColor: true, children: [` │ ${S.coldRestarts.length} cold restart${S.coldRestarts.length === 1 ? '' : 's'} ${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}`] }))
-    if (S.rateLimits.length) parts.push(Text(limitTone(S.rateLimits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(S.rateLimits)] })))
+    const limits = allLimits()
+    if (limits.length) parts.push(Text(limitTone(limits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(limits)] })))
     const row = [Box({ flexDirection: 'row', children: parts })]
     if (st.kind === 'cooling' && big) {
       row.push(Button({ key: 'keepwarm', label: 'keep warm', hotkey: '1', plain: true, onPress: async () => { now = await $.clock.now(); startKeepWarm($, settings.keepWarmHours); await heartbeat($, true); $.ui.invalidate('ui.render') } }))
@@ -990,7 +1031,7 @@ export function register(on) {
       help('ck-rewrite', `rewrite: cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
       help('ck-sc', 'session cost: what this session has cost so far, at API list prices'),
     ]
-    const resets = resetsText(S.rateLimits, now)
+    const resets = resetsText(limits, now)
     if (resets) tips.push(help('ck-limits', 'plan limits: ' + resets))
     return Box({ flexDirection: 'column', children: below ? [...tips, mine, below] : [...tips, mine] })
   })
@@ -1017,7 +1058,7 @@ function footerLabel() {
   if (st.kind === 'kept') parts.push('cache kept warm')
   else if (st.kind === 'cooling' && big) parts.push(`cache cools in ${minutes(st.left)} · /keepwarm`)
   else if (st.kind === 'cold' && big) parts.push(`cache cold · rewrite ≈ ${money(rewriteCost(S.ctx, S.model, ttlMin()))}`)
-  const high = S.rateLimits.filter((l) => (l.percentUsed || 0) >= 80)
+  const high = allLimits().filter((l) => (l.percentUsed || 0) >= 80)
   if (high.length) parts.push(limitsText(high))
   if (H.text) parts.push(`handoff ready · /${names.handoff} continue`)
   return parts.join(' · ')
