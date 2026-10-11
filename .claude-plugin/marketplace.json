@@ -14,6 +14,11 @@
       "name": "cache-status",
       "source": "./mods/cache-status",
       "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board and /handoff. Fork of Cache Keeper by Nate Herk."
+    },
+    {
+      "name": "session-reaper",
+      "source": "./mods/session-reaper",
+      "description": "Archives idle Claude desktop sessions and stops idle process trees left behind by ended sessions (Windows)"
     }
   ]
 }
