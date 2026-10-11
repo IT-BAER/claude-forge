@@ -10,6 +10,7 @@ A mod adds a pane, a band or a command to Claude Code itself.
 | --- | --- |
 | [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
 | [`cache-status`](mods/cache-status) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board` and `/handoff`. Fork of Cache Keeper by Nate Herk. |
+| [`session-reaper`](mods/session-reaper) | Archives desktop sessions idle for more than 60 minutes and stops idle process trees (MCP servers, dev servers) left behind by ended sessions. Windows and the desktop Code tab only; needs one permission rule in auto mode. |
 
 ## VS Code extensions
 
@@ -48,6 +49,7 @@ claude plugin marketplace add IT-BAER/claude-forge
 ```
 /plugin install file-explorer@claude-forge
 /plugin install cache-status@claude-forge
+/plugin install session-reaper@claude-forge
 ```
 
 Terminal form: `claude plugin install file-explorer@claude-forge`. Start a new session afterwards.
