@@ -7,6 +7,10 @@ A Claude Code mod for the Claude desktop app on Windows. Every few minutes it:
 
 Every open session loads the mod, but only one of them does the work (a heartbeat in the plugin store picks it).
 
+## Why it exists
+
+Each desktop Code session keeps its own `claude.exe` (about 0.8 GB) plus its own copy of every MCP server, and none of it goes away while the session sits in the sidebar. On a 32 GB machine, a day of work left 38 `claude.exe` (15 GB) and 88 `node.exe` (8 GB) processes running, the commit charge reached 47.1 of 47.6 GB, and Chrome crashed with an out-of-memory error. Archiving the idle sessions and stopping their leftover processes brought the commit charge down to 30 GB.
+
 ## Requirements
 
 - Windows installed in `C:\Windows` (the process step runs `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` by its fixed path and reads `Win32_Process`).
