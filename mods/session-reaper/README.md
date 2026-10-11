@@ -9,7 +9,7 @@ Every open session loads the mod, but only one of them does the work (a heartbea
 
 ## Requirements
 
-- Windows (the process step uses PowerShell and `Win32_Process`).
+- Windows installed in `C:Windows` (the process step runs `C:WindowsSystem32WindowsPowerShell1.0powershell.exe` by its fixed path and reads `Win32_Process`).
 - The Claude desktop app's Code tab. The archive step calls the app's `ccd_session_mgmt` server, which other hosts (CLI, VS Code) do not have; there only the process step runs.
 - In auto permission mode the archive call from a mod is refused unless it is allowed. Add this rule to `permissions.allow` in `~/.claude/settings.json`:
 

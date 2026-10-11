@@ -19,7 +19,7 @@ async function start($: any, on: any, w: World) {
   const archived: string[] = []
   const killed: string[] = []
   const runs: { exe: string; cwd?: string }[] = []
-  mock.env(on, { SystemRoot: String.raw`C:\Windows` })
+  mock.env(on, { SystemRoot: String.raw`C:\work\evil` })
   on('session.id', () => ({ value: w.id ?? 'me' }))
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('ui.log', () => ({ value: undefined }))
@@ -116,7 +116,7 @@ test('a reused PID is not taken for a tracked process', async ($, on) => {
   expect(killed).toEqual([])
 })
 
-test('runs PowerShell by its System32 path, never from the session folder', async ($, on) => {
+test('runs PowerShell by its fixed System32 path, ignoring SystemRoot and the session folder', async ($, on) => {
   const { clock, runs } = await start($, on, { procs: [] })
   await clock.advance(TICK)
   expect(runs.length).toBeGreaterThan(0)
