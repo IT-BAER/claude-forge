@@ -88,17 +88,18 @@ const RESUME_LINE = /^\s*Continue from session handoff:/i
 // session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
 const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)[^"'\s/]*\.md|\/handoffs\/[^"'\s]*\.md)/
 
-// Notes a write to a handoff file; the turn end loads it.
+// Notes a write to a handoff file; true when the write was one
 function noteHandoffFile(e) {
-  if (e.tool !== 'Write' && e.tool !== 'Edit') return
+  if (e.tool !== 'Write' && e.tool !== 'Edit') return false
   let raw = ''
   try {
     raw = JSON.stringify(e.input || e.args || e.params || e)
   } catch {
-    return
+    return false
   }
   const m = HANDOFF_FILE.exec(raw.replace(/\\\\/g, '/'))
   if (m) H.file = H.lastFile = m[0]
+  return !!m
 }
 
 // A header status other than active (consumed) retires a handoff file.
@@ -116,21 +117,27 @@ async function fileRetired($, path) {
   }
 }
 
-// A handoff file becomes the ready handoff unless its header retires it
-async function captureHandoffFile($, path = H.file) {
-  H.file = ''
+// A handoff file becomes the ready handoff unless its header retires it.
+// early: right after the write, mid-turn; the turn end checks the file again.
+async function captureHandoffFile($, path = H.file, early = false) {
+  if (!early) H.file = ''
   try {
     if (!path || !(await $.fs.exists(path))) return false
-    const text = (await $.fs.read(path)).replace(/^﻿/, '')
-    if (text.trim().length < 200 || retired(text)) return false
-    const askAfter = H.askAfter
-    H.text = text.trim()
+    const text = (await $.fs.read(path)).replace(/^﻿/, '').trim()
+    if (text.length < 200 || retired(text)) return false
+    const known = H.fromFile && H.path === path && H.text === text
+    H.text = text
     H.path = path
     H.fromFile = true
+    if (!known) $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    if (early) {
+      $.ui.invalidate('ui.render')
+      return true
+    }
+    const askAfter = H.askAfter
     H.armed = false
     H.notTurn = ''
     H.askAfter = false
-    $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
     // Off the hook: the turn is ending, and a dialog would hold it open
     if (askAfter) $.clock.after(300, () => offerContinue($).catch(() => {}))
     return true
@@ -905,7 +912,7 @@ export function register(on) {
     try {
       const r = await next(e)
       // a denied or failed write left the file as it was
-      if (!e.agentId && r && !r.deny && !r.isError) noteHandoffFile(e)
+      if (!e.agentId && r && !r.deny && !r.isError && noteHandoffFile(e)) await captureHandoffFile($, H.file, true)
       return r
     } finally {
       if (S.waitingSince) {

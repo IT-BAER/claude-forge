@@ -168,6 +168,20 @@ test('a handoff the skill writes to a file is ready', async ($, on) => {
   expect(live().handoff).toBe('ready')
 })
 
+test('a handoff file is ready as soon as it is written, before the turn ends', async ($, on) => {
+  const { files, clock, live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+  })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+  await clock.advance(2000)
+  expect(live().handoff).toBe('ready')
+  await $.turn.complete({ reason: 'answer', answer: 'Handoff written.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('ready')
+})
+
 test('a resume turn that calls the skill but never edits the file saves no handoff', async ($, on) => {
   const { files, live } = await start($, on, (on) => {
     on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
