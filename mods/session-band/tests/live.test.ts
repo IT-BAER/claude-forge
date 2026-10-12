@@ -313,7 +313,7 @@ test('the band keeps cooling and cold restarts short and puts the full text in h
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const drawn = all(await ui.drawn())
     const texts = drawn.filter((n) => n.type === 'Text').map((n) => String(n.children.join('')))
     expect(texts).toContain('◐ c 3m')
@@ -338,7 +338,7 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const drawn = all(await ui.drawn())
     const texts = drawn.filter((n) => n.type === 'Text')
     const kept = texts.find((n) => /^◆ c kept \d{1,2}:\d\d[ap]m$/.test(n.children.join('')))
