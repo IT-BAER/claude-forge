@@ -234,9 +234,9 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
     const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
     const drawn = all(await ui.drawn())
-    expect(drawn.find((n) => n.type === 'Text' && /5h 48% · w 24%/.test(String(n.children)))?.hover?.scope).toBe('ck-limits')
+    expect(drawn.find((n) => n.type === 'Text' && /5h 48% w 24%/.test(String(n.children)))?.hover?.scope).toBe('ck-limits')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/)
+    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h \(5-hour window\) resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/)
     await ui.unmount()
   }
 })
@@ -272,12 +272,72 @@ test('per-model weekly windows (Fable) come from the usage endpoint into the ban
   const ui = await $.ui.mount({ plugin: 'cache-status', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const drawn = all(await ui.drawn())
-  expect(drawn.some((n) => n.type === 'Text' && /5h 48% · fw 33%/.test(String(n.children)))).toBe(true)
+  expect(drawn.some((n) => n.type === 'Text' && /5h 48% fw 33%/.test(String(n.children)))).toBe(true)
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/)
+  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw \(weekly, Fable only\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/)
   await ui.unmount()
   // within five minutes the endpoint is not asked again
   await $.turn.start({ turnId: 't1' } as any)
   await $.turn.complete({ reason: 'answer', answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1' } as any)
   expect(asked.length).toBe(1)
+})
+
+test('the band keeps cooling and cold restarts short and puts the full text in hover help', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 70 * 60000).toISOString(), message: { role: 'assistant' } })
+  const { clock } = await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: [], cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('turn.step', async function* (_: any, e: any) {
+      return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: { model: 'claude-opus-5-5', input_tokens: 1000, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 89000 } }
+    })
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  const step = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 } as any)
+  for await (const _ of step) { /* drain */ }
+  await step.result
+  await clock.advance(57 * 60000)
+  const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+  const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const drawn = all(await ui.drawn())
+    const texts = drawn.filter((n) => n.type === 'Text').map((n) => String(n.children.join('')))
+    expect(texts).toContain('◐ c 3m')
+    const band = texts.filter((t) => /^([◐●○◆]| │)/.test(t))
+    expect(band.some((t) => /cools in|cold restart/.test(t))).toBe(false)
+    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache: cooling, expires in 3m \(60m TTL\);/)
+    const cr = drawn.find((n) => n.type === 'Text' && /^ │ cr 1 \$\d+\.\d\d$/.test(String(n.children.join(''))))
+    expect(cr?.hover?.scope).toBe('ck-cr')
+    expect(helpText(drawn, 'ck-cr')).toMatch(/^cr = cold restarts: 1 send rewrote the expired cache this session, \$\d+\.\d\d in total$/)
+    await ui.unmount()
+  }
+})
+
+test('kept warm, rewrite cost and plan limits stay short, and band segments wrap whole', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 9 }, { kind: 'seven_day', percentUsed: 10 }], cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  await $.command.run({ command: 'keepwarm', args: '2' } as any)
+  const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+  const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const drawn = all(await ui.drawn())
+    const texts = drawn.filter((n) => n.type === 'Text')
+    const kept = texts.find((n) => /^◆ c kept \d{1,2}:\d\d[ap]m$/.test(n.children.join('')))
+    expect(kept?.hover?.scope).toBe('ck-c')
+    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache: kept warm until \d{1,2}:\d\d[ap]m, 0 pings so far \(\$0\)/)
+    expect(texts.some((n) => /^ │ rwc \$\d+\.\d\d$/.test(n.children.join('')))).toBe(true)
+    expect(texts.some((n) => n.children.join('') === ' │ 5h 9% w 10%')).toBe(true)
+    expect(texts.find((n) => n.children.join('') === ' │ ctx 90.0k')?.hover?.scope).toBe('ck-ctx')
+    expect(helpText(drawn, 'ck-ctx')).toBe("ctx = context: 90.0k tokens in this session's context window of 200k")
+    expect(helpText(drawn, 'ck-rewrite')).toMatch(/^rwc = rewrite cost: /)
+    expect(helpText(drawn, 'ck-sc')).toMatch(/^sc = session cost: /)
+    expect(helpText(drawn, 'ck-limits')).toBe('plan limits: 5h (5-hour window) · w (weekly, all models)')
+    expect(drawn.find((n) => n.type === 'Box' && n.children?.some((c: any) => c === kept))?.props?.flexWrap).toBe('wrap')
+    await ui.unmount()
+  }
 })

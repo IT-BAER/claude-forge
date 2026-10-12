@@ -29,17 +29,18 @@ Start a new session afterwards.
 
 ## The band
 
-`● c 60m │ ctx 342k │ rwc ≈ $2.73 │ sc $13 │ 5h 84% · w 24%`
+`● c 60m │ ctx 342k │ rwc $2.73 │ sc $13 │ 5h 84% w 24%`
 
 | Part | Meaning |
 | --- | --- |
-| `c 60m` | Prompt cache state and minutes until it expires. Yellow 5 minutes before expiry, red once cold. |
+| `c 60m` | Prompt cache state and minutes until it expires. Yellow 5 minutes before expiry, red once cold. While keep-warm runs: `◆ c kept 7:12pm`, the time it stops. |
 | `ctx` | Tokens in context. |
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. |
 | `sc` | Session cost so far, at API list prices. |
+| `cr` | Cold restarts: how many sends rewrote an expired cache this session, and what they cost. Shown only after the first one. |
 | `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
-Hover `c`, `rwc` or `sc` for a one-line explanation above the band. Hover the plan limits for when each window resets: `5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)`. On a subscription the prices show up as usage against your limits, not as a bill.
+Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band. Each starts with what the label stands for (`rwc = rewrite cost: ...`), and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for what each window is and when it resets: `5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h)`. On a subscription the prices show up as usage against your limits, not as a bill.
 
 ## Commands
 

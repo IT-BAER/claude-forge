@@ -289,20 +289,24 @@ function ttlMin() {
 // a per-model weekly window takes its model's initial ("fw" for Fable)
 const LIMIT_LABEL = { five_hour: '5h', seven_day: 'w', spend_limit: 'spend' }
 const limitLabel = (l) => LIMIT_LABEL[l.kind] || (l.model ? `${l.model[0].toLowerCase()}w` : l.kind)
+const LIMIT_NAME = { five_hour: '5-hour window', seven_day: 'weekly, all models', spend_limit: 'spend limit' }
+const limitName = (l) => LIMIT_NAME[l.kind] || (l.model ? `weekly, ${l.model} only` : '')
 
-function limitsText(limits) {
-  return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed)}%`).join(' · ')
+function limitsText(limits, sep = ' · ') {
+  return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed)}%`).join(sep)
 }
 
-// When each window resets: "5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)"
+// Each window's name and reset: "5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h)"
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 function resetsText(limits, at) {
-  return limits.filter((l) => l.resetsAt).map((l) => {
+  return limits.map((l) => {
+    const name = limitName(l) ? `${limitLabel(l)} (${limitName(l)})` : limitLabel(l)
+    if (!l.resetsAt) return name
     const t = Date.parse(l.resetsAt)
     const left = t - at
     const day = left >= 24 * 60 * MIN ? DAYS[new Date(t).getDay()] + ' ' : ''
     const span = left <= 0 ? 'due' : left >= 24 * 60 * MIN ? `in ${Math.floor(left / (24 * 60 * MIN))}d${Math.floor((left % (24 * 60 * MIN)) / (60 * MIN))}h` : `in ${minutes(left)}`
-    return `${limitLabel(l)} resets ${day}${clock(t)} (${span})`
+    return `${name} resets ${day}${clock(t)} (${span})`
   }).join(' · ')
 }
 
@@ -995,18 +999,21 @@ export function register(on) {
     const big = S.ctx >= settings.bigTokens
     const parts = []
     const tip = (scope) => ({ scope, underline: true })
-    if (st.kind === 'kept') parts.push(Text({ color: 'cyan', children: [`◆ kept warm · ${S.pings} ping${S.pings === 1 ? '' : 's'} ${money(S.pingUsd)} · until ${clock(S.keepWarmUntil)}`] }))
+    if (st.kind === 'kept') parts.push(Text({ color: 'cyan', hover: tip('ck-c'), children: [`◆ c kept ${clock(S.keepWarmUntil)}`] }))
     else if (st.kind === 'warm') parts.push(Text({ color: 'green', hover: tip('ck-c'), children: [`● c ${minutes(st.left)}`] }))
-    else if (st.kind === 'cooling') parts.push(Text({ color: 'yellow', bold: true, hover: tip('ck-c'), children: [`◐ c cools in ${minutes(st.left)}`] }))
+    else if (st.kind === 'cooling') parts.push(Text({ color: 'yellow', bold: true, hover: tip('ck-c'), children: [`◐ c ${minutes(st.left)}`] }))
     else if (st.kind === 'cold') parts.push(Text(big ? { color: 'red', bold: true, hover: tip('ck-c'), children: [`○ c cold ${minutes(-st.left)}`] } : { dimColor: true, hover: tip('ck-c'), children: [`○ c cold ${minutes(-st.left)}`] }))
-    parts.push(Text({ dimColor: true, children: [` │ ctx ${tokens(S.ctx)}`] }))
+    parts.push(Text({ dimColor: true, hover: tip('ck-ctx'), children: [` │ ctx ${tokens(S.ctx)}`] }))
     if (st.kind === 'cold' && big) parts.push(Text({ color: 'red', hover: tip('ck-rewrite'), children: [` │ next send rewrites it ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
-    else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` │ rwc ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
+    else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` │ rwc ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
     parts.push(Text({ dimColor: true, hover: tip('ck-sc'), children: [` │ sc ${money(S.costUsd)}`] }))
-    if (S.coldRestarts.length) parts.push(Text({ dimColor: true, children: [` │ ${S.coldRestarts.length} cold restart${S.coldRestarts.length === 1 ? '' : 's'} ${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}`] }))
+    const cold = S.coldRestarts.length
+    const coldUsd = money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))
+    if (cold) parts.push(Text({ dimColor: true, hover: tip('ck-cr'), children: [` │ cr ${cold} ${coldUsd}`] }))
     const limits = allLimits()
-    if (limits.length) parts.push(Text(limitTone(limits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(limits)] })))
-    const row = [Box({ flexDirection: 'row', children: parts })]
+    if (limits.length) parts.push(Text(limitTone(limits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(limits, ' ')] })))
+    // Whole segments wrap to a second row; a squeezed segment would split its label from its value
+    const row = [Box({ flexDirection: 'row', flexWrap: 'wrap', children: parts })]
     if (st.kind === 'cooling' && big) {
       row.push(Button({ key: 'keepwarm', label: 'keep warm', hotkey: '1', plain: true, onPress: async () => { now = await $.clock.now(); startKeepWarm($, settings.keepWarmHours); await heartbeat($, true); $.ui.invalidate('ui.render') } }))
     } else if (st.kind === 'kept') {
@@ -1026,11 +1033,14 @@ export function register(on) {
     const mine = Box({ flexDirection: 'row', justifyContent: 'space-between', width: '100%', columnGap: 2, children: [left, right] })
     // Hover help rows sit above the band row, so revealing one leaves the hovered text in place.
     const help = (scope, text) => Box({ display: 'none', hover: { scope, display: 'flex' }, children: [Text({ dimColor: true, italic: true, children: [text] })] })
+    const cacheHelp = { kept: `kept warm until ${clock(S.keepWarmUntil)}, ${S.pings} ping${S.pings === 1 ? '' : 's'} so far (${money(S.pingUsd)})`, warm: `warm, expires in ${minutes(st.left)}`, cooling: `cooling, expires in ${minutes(st.left)}`, cold: `cold for ${minutes(-st.left)}` }
     const tips = [
-      help('ck-c', `cache: prompt cache state and time until it expires${ttl ? ` (${ttl}m TTL)` : ''}; once cold, the next send writes the whole context again`),
-      help('ck-rewrite', `rewrite: cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
-      help('ck-sc', 'session cost: what this session has cost so far, at API list prices'),
+      help('ck-c', `c = prompt cache: ${cacheHelp[st.kind] || 'state unknown'}${ttl ? ` (${ttl}m TTL)` : ''}; once cold, the next send writes the whole context again`),
+      help('ck-ctx', `ctx = context: ${tokens(S.ctx)} tokens in this session's context window${S.window ? ` of ${tokens(S.window)}` : ''}`),
+      help('ck-rewrite', `rwc = rewrite cost: estimated cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
+      help('ck-sc', 'sc = session cost: what this session has cost so far, at API list prices'),
     ]
+    if (cold) tips.push(help('ck-cr', `cr = cold restarts: ${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`))
     const resets = resetsText(limits, now)
     if (resets) tips.push(help('ck-limits', 'plan limits: ' + resets))
     return Box({ flexDirection: 'column', children: below ? [...tips, mine, below] : [...tips, mine] })
