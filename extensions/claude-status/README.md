@@ -21,7 +21,7 @@ The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods c
 | `sc` | Session cost so far, at API list prices. |
 | `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. |
 
-Only the part that needs attention takes a colour, as in the band. The section sits left of every other item on the right side of the status bar, between two dim bars, so it does not run into the items of other extensions.
+Only the part that needs attention takes a colour, as in the band. The section sits at the right end of the status bar, right of every other item, between two dim bars. That keeps it under the chat in the secondary sidebar, and opening a file does not move it.
 
 Plan limits belong to the account, not to one chat. The extension shows the highest value of the current window across all live chats, so a chat you just reopened shows the limits before its first turn ends.
 
@@ -48,7 +48,7 @@ Install the cache-status mod first (see [Requirements](#requirements)). There is
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.11.vsix
+code --install-extension claude-status-0.2.12.vsix
 ```
 
 Then run **Developer: Reload Window**.

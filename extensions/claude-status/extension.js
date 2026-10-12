@@ -15,9 +15,9 @@ const COLOR = { green: 'terminal.ansiGreen', yellow: 'terminal.ansiYellow', red:
 const KEYS = ['cache', 'ctx', 'rwc', 'sc', 'limits'] // render()'s segments, left to right
 
 function activate(context) {
-  // Right side, highest priority: left of every other right-side item, the
-  // Claude Code item included. Higher sits further left.
-  let priority = Number.MAX_SAFE_INTEGER
+  // Right side, lowest priority: right of every other right-side item, under the
+  // chat in the secondary sidebar; editor items (Ln/Col, encoding) never push it. Higher sits further left.
+  let priority = Number.MIN_SAFE_INTEGER + 100
   const all = []
   const create = (id, name) => {
     const i = vscode.window.createStatusBarItem(id, vscode.StatusBarAlignment.Right, priority--)
