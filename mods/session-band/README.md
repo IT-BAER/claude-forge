@@ -1,10 +1,10 @@
-# cache-status
+# session-band
 
 A compact prompt-cache status band for Claude Code, with a cold-send guard, keep-warm, a board of all local chats, and handoffs to a fresh chat.
 
 This is a fork of **Cache Keeper** by Nate Herk ([nateherkai/claude-code-mods](https://github.com/nateherkai/claude-code-mods)), MIT licensed. The cache logic, board, guard and handoff flow are his work. See [Changes from Cache Keeper](#changes-from-cache-keeper) for what this fork adds.
 
-<img src="screenshots/band.png" alt="cache-status band above the prompt" width="686">
+<img src="screenshots/band.png" alt="session-band above the prompt" width="686">
 
 *The band above the prompt: cache warm for 60 minutes, 342k tokens in context, a cold rewrite would cost about $2.73, the session cost $13 so far, and the 5-hour and weekly plan limits.*
 
@@ -22,7 +22,7 @@ Every request re-reads the whole chat. From the prompt cache that costs a tenth 
 
 ```
 /plugin marketplace add IT-BAER/claude-forge
-/plugin install cache-status@claude-forge
+/plugin install session-band@claude-forge
 ```
 
 Start a new session afterwards.
@@ -55,8 +55,9 @@ Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band.
 
 - Short band labels (`c`, `rwc`, `sc`, `w`) so the band fits next to the prompt, session cost before the plan limits.
 - Hover help for the short labels. The help row opens above the band, so the hovered text does not move.
-- Handoff files: when Claude writes a `session-handoff.md`, a `restart-packet.md` (also with a suffix, like `session-handoff-pve.md`) or a file under `handoffs/`, the band offers to clear and continue from that file. Any header format works; only a header marked `status: consumed` (or another non-active status) is skipped. If a handoff turn ends on a short answer (a Stop hook added a tail), the last handoff file written in the session is used instead. The fresh chat gets a short "read this file" prompt instead of the whole text.
-- Renamed to `cache-status`. Data lives in `~/.claude/mods-data/cache-status/`.
+- Handoff files: when Claude writes a `session-handoff.md`, a `restart-packet.md` (also with a suffix, like `session-handoff-pve.md`) or a file under `handoffs/`, the band offers to clear and continue from that file as soon as it is written. Any header format works; only a header marked `status: consumed` (or another non-active status) is skipped. If a handoff turn ends on a short answer (a Stop hook added a tail), the last handoff file written in the session is used instead. The fresh chat gets a short "read this file" prompt instead of the whole text.
+- Renamed to `session-band`. Data lives in `~/.claude/mods-data/session-band/`.
+- Earlier versions of this fork were called `cache-status`. To switch, run `/plugin uninstall cache-status@claude-forge`, then install `session-band@claude-forge` and restart each chat. Nothing reads `~/.claude/mods-data/cache-status/` any more, so you can delete that folder once no chat runs the old mod.
 
 ## Where the data lives
 

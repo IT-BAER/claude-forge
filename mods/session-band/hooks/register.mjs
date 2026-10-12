@@ -1,4 +1,4 @@
-// Cache Status (fork of Cache Keeper by Nate Herk): watches this session's prompt cache, keeps big caches warm on
+// Session Band (fork of Cache Keeper by Nate Herk): watches this session's prompt cache, keeps big caches warm on
 // request, refuses a cold send without asking first, and shows every local
 // session on one board (/board).
 //
@@ -166,7 +166,7 @@ function fileStamp(ms) {
 
 async function saveHandoff($, text) {
   const project = basename(S.cwd).replace(/[^A-Za-z0-9-]+/g, '-') || 'session'
-  const path = `${home || '.'}/.claude/mods-data/cache-status/handoffs/${fileStamp(now)}-${project}-${S.id.slice(0, 8)}.md`.replace(/\\/g, '/')
+  const path = `${home || '.'}/.claude/mods-data/session-band/handoffs/${fileStamp(now)}-${project}-${S.id.slice(0, 8)}.md`.replace(/\\/g, '/')
   await $.fs.write(path, text + '\n')
   return path
 }
@@ -542,7 +542,7 @@ async function followSessionId($) {
 }
 
 function outsidePath(dir, id) {
-  return `${home}/.claude/mods-data/cache-status/${dir}/${id}.json`.replace(/\\/g, '/')
+  return `${home}/.claude/mods-data/session-band/${dir}/${id}.json`.replace(/\\/g, '/')
 }
 
 // What the band's handoff button shows, in the order the band picks it
@@ -643,7 +643,7 @@ async function keepWarmStep($) {
   if (now - S.lastActivity < ttl * MIN - margin) return
   let reply = null
   try {
-    reply = await $.model.fork({ prompt: 'cache-status keep-alive ping. Reply with only: ok' })
+    reply = await $.model.fork({ prompt: 'session-band keep-alive ping. Reply with only: ok' })
   } catch {
     reply = null
   }
@@ -706,7 +706,7 @@ function statusText() {
   const st = cacheState(myHeartbeat())
   const ttl = ttlMin()
   const lines = []
-  lines.push(`Cache Status: ${tokens(S.ctx)} tokens in context on ${priceFor(S.model).id}, cache window ${ttl} min (${settings.ttlMin ? 'set by you' : S.ttlSource}).`)
+  lines.push(`Session Band: ${tokens(S.ctx)} tokens in context on ${priceFor(S.model).id}, cache window ${ttl} min (${settings.ttlMin ? 'set by you' : S.ttlSource}).`)
   if (st.kind === 'unknown') lines.push('No request yet this session, so the cache state is unknown.')
   if (st.kind === 'warm' || st.kind === 'cooling') lines.push(`Cache is warm for about ${minutes(st.left)} more.`)
   if (st.kind === 'cold') lines.push(`Cache went cold ${minutes(-st.left)} ago. The next message rewrites it for about ${money(rewriteCost(S.ctx, S.model, ttl))}.`)
@@ -734,7 +734,7 @@ export function register(on) {
     S.model = await $.session.model()
     await loadSettings($)
     await readRecording($)
-    names.cache = (await registerCommand($, 'cache', 'Cache Status status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]]')) || names.cache
+    names.cache = (await registerCommand($, 'cache', 'Session Band status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]]')) || names.cache
     names.keepwarm = (await registerCommand($, 'keepwarm', 'Keep this session\'s prompt cache warm (default 4 hours), or /keepwarm off', '[hours|off]', true)) || names.keepwarm
     names.board = (await registerCommand($, 'board', 'Every local Claude Code session: state, context, cache, cost', '', true)) || names.board
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
@@ -798,7 +798,7 @@ export function register(on) {
     }
     if (answer === 'Send anyway') return next(e)
     $.ui.toast('Not sent. A fresh session with a short handoff avoids the rewrite entirely.', { timeoutMs: 8000 })
-    return { drop: 'Cancelled by cache-status before a cold cache rewrite' }
+    return { drop: 'Cancelled by session-band before a cold cache rewrite' }
   })
 
   on('turn.start', async ($, e, next) => {

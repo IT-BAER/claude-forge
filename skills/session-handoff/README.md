@@ -2,7 +2,7 @@
 
 A skill that writes the state of a Claude Code session to a file, so a fresh chat can continue the work after `/clear`, in another window, or on another day.
 
-The [cache-status](../../mods/cache-status) mod bundles a chat-only handoff skill (from Cache Keeper by Nate Herk). This one writes a file instead, with a fixed header and 12 sections, and has a consume step for the next chat.
+The [session-band](../../mods/session-band) mod bundles a chat-only handoff skill (from Cache Keeper by Nate Herk). This one writes a file instead, with a fixed header and 12 sections, and has a consume step for the next chat.
 
 ## What it writes
 
@@ -26,9 +26,9 @@ Continue from session handoff: read <full handoff path>, consume it with session
 
 In the new chat, paste the resume line. The skill reads the file, restates the goal in five bullets or fewer, names the next action and changes the header to `status: consumed`. A consumed file is not offered again.
 
-## With cache-status and claude-status
+## With session-band and claude-status
 
-The `handoff` button of the cache-status band (and of the claude-status bar in VS Code) runs a skill named exactly `session-handoff` first, and the mod's bundled one only if that is missing. So with this skill installed the button writes the file. Once the file is written, the button turns into `clear and continue`: it clears the chat and puts the resume line into the prompt box.
+The `handoff` button of the session-band band (and of the claude-status bar in VS Code) runs a skill named exactly `session-handoff` first, and the mod's bundled one only if that is missing. So with this skill installed the button writes the file. Once the file is written, the button turns into `clear and continue`: it clears the chat and puts the resume line into the prompt box.
 
 ## Install
 

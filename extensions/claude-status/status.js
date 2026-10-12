@@ -1,4 +1,4 @@
-// Pure logic: reads the cache-status mod's live files and formats them.
+// Pure logic: reads the session-band mod's live files and formats them.
 // No vscode import here, so node --test covers it.
 const fs = require('node:fs')
 const path = require('node:path')

@@ -1,5 +1,5 @@
 {
-  "name": "cache-status",
+  "name": "session-band",
   "description": "Prompt cache status band (c / ctx / rwc / sc / plan limits) with hover help, cold-send guard, keep-warm, /board, and /handoff that also picks up handoff files. Fork of Cache Keeper by Nate Herk.",
   "author": {
     "name": "IT-BAER"

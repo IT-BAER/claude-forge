@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-const BASE = 'D:/home/t/.claude/mods-data/cache-status'
+const BASE = 'D:/home/t/.claude/mods-data/session-band'
 const LIVE = `${BASE}/live/sess-1.json`
 const CMD = `${BASE}/commands/sess-1.json`
 const NOW = 1_000_000
@@ -245,7 +245,7 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'cache-status', surface, component: 'AbovePrompt', props: {} as any })
+    const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
     const drawn = all(await ui.drawn())
     expect(drawn.find((n) => n.type === 'Text' && /5h 48% w 24%/.test(String(n.children)))?.hover?.scope).toBe('ck-limits')
@@ -283,7 +283,7 @@ test('per-model weekly windows (Fable) come from the usage endpoint into the ban
     { kind: 'five_hour', percentUsed: 48, resetsAt: new Date(NOW + 135 * 60000).toISOString() },
     { kind: 'weekly_fable', model: 'Fable', percentUsed: 33, resetsAt: new Date(Math.round(Date.parse(fableReset) / 60000) * 60000).toISOString() },
   ])
-  const ui = await $.ui.mount({ plugin: 'cache-status', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
+  const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const drawn = all(await ui.drawn())
   expect(drawn.some((n) => n.type === 'Text' && /5h 48% fw 33%/.test(String(n.children)))).toBe(true)

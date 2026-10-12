@@ -3,7 +3,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, handoffItem, writeCommand, modMissing } = require('./status')
 
-const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'cache-status')
+const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'session-band')
 const LIVE_DIR = path.join(DATA_DIR, 'live')
 const COMMAND_DIR = path.join(DATA_DIR, 'commands')
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions')
@@ -34,11 +34,11 @@ function activate(context) {
   }
   // Shown alone while no chat on this machine has run the mod
   const hint = create('claudeStatus.modMissing', 'Claude Status Setup')
-  hint.text = '$(warning) cache-status mod not found'
+  hint.text = '$(warning) session-band mod not found'
   hint.tooltip = new vscode.MarkdownString([
-    'Claude Status shows what the **cache-status** mod writes, and no Claude Code chat on this machine has run it yet.',
+    'Claude Status shows what the **session-band** mod writes, and no Claude Code chat on this machine has run it yet.',
     'Install it in Claude Code, then restart the chat:',
-    '```\n/plugin marketplace add IT-BAER/claude-forge\n/plugin install cache-status@claude-forge\n```',
+    '```\n/plugin marketplace add IT-BAER/claude-forge\n/plugin install session-band@claude-forge\n```',
     'Click for the setup steps.',
   ].join('\n\n'))
   hint.command = { title: 'Open setup steps', command: 'vscode.open', arguments: [vscode.Uri.parse(SETUP_URL)] }
@@ -110,7 +110,7 @@ function activate(context) {
   const showSessions = async () => {
     const items = boardItems(readLive(LIVE_DIR, Date.now()), Date.now())
     if (!items.length) {
-      vscode.window.showInformationMessage('Claude Status: no live Claude Code session found. Is the cache-status mod installed and up to date?')
+      vscode.window.showInformationMessage('Claude Status: no live Claude Code session found. Is the session-band mod installed and up to date?')
       return
     }
     await vscode.window.showQuickPick(items, { title: 'Claude Code sessions', matchOnDescription: true, matchOnDetail: true })

@@ -11,8 +11,8 @@
       "description": "VS Code style file tree of the session's working directory in a pane"
     },
     {
-      "name": "cache-status",
-      "source": "./mods/cache-status",
+      "name": "session-band",
+      "source": "./mods/session-band",
       "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board and /handoff. Fork of Cache Keeper by Nate Herk."
     },
     {

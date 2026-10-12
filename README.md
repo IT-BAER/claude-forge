@@ -9,14 +9,14 @@ A mod adds a pane, a band or a command to Claude Code itself.
 | Mod | What it does |
 | --- | --- |
 | [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
-| [`cache-status`](mods/cache-status) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board` and `/handoff`. Fork of Cache Keeper by Nate Herk. |
+| [`session-band`](mods/session-band) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board` and `/handoff`. Fork of Cache Keeper by Nate Herk. |
 | [`session-reaper`](mods/session-reaper) | Archives desktop sessions idle for more than 60 minutes and stops idle process trees (MCP servers, dev servers) left behind by ended sessions, which otherwise fill RAM until other apps run out of memory. Windows and the desktop Code tab only; needs one permission rule in auto mode. |
 
 ## VS Code extensions
 
 | Extension | What it does |
 | --- | --- |
-| [`claude-status`](extensions/claude-status) | The `cache-status` values in the VS Code status bar, because mods cannot draw above the prompt in the VS Code chat. **Does nothing without the `cache-status` mod**: install the mod first, then the extension from a built .vsix. |
+| [`claude-status`](extensions/claude-status) | The `session-band` values in the VS Code status bar, because mods cannot draw above the prompt in the VS Code chat. **Does nothing without the `session-band` mod**: install the mod first, then the extension from a built .vsix. |
 
 ## Skills
 
@@ -24,7 +24,7 @@ A skill teaches Claude a repeatable task. Install a skill by copying its folder 
 
 | Skill | What it does |
 | --- | --- |
-| [`session-handoff`](skills/session-handoff) | Writes the session state to `.claude/session-handoff.md` (12 fixed sections) so a fresh chat can continue, and consumes it in the next chat. The `cache-status` handoff button uses it when installed. |
+| [`session-handoff`](skills/session-handoff) | Writes the session state to `.claude/session-handoff.md` (12 fixed sections) so a fresh chat can continue, and consumes it in the next chat. The `session-band` handoff button uses it when installed. |
 
 ## Install
 
@@ -48,7 +48,7 @@ claude plugin marketplace add IT-BAER/claude-forge
 
 ```
 /plugin install file-explorer@claude-forge
-/plugin install cache-status@claude-forge
+/plugin install session-band@claude-forge
 /plugin install session-reaper@claude-forge
 ```
 

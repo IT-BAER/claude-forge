@@ -1,4 +1,0 @@
-{
-  "description": "Cache Status hooks module",
-  "modules": ["./register.mjs"]
-}

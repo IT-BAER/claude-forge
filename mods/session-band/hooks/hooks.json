@@ -1,0 +1,4 @@
+{
+  "description": "Session Band hooks module",
+  "modules": ["./register.mjs"]
+}

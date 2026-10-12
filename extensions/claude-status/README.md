@@ -1,9 +1,9 @@
 # Claude Status
 
-The [cache-status](../../mods/cache-status) band for VS Code. Claude Code mods cannot draw above the prompt in the VS Code chat, so this extension shows the same values in the VS Code status bar.
+The [session-band](../../mods/session-band) band for VS Code. Claude Code mods cannot draw above the prompt in the VS Code chat, so this extension shows the same values in the VS Code status bar.
 
 > [!IMPORTANT]
-> This extension does nothing on its own. It has no data source of its own and only shows what the **cache-status mod** writes. Installed without the mod, the status bar shows only `cache-status mod not found`; click it for these setup steps. Install the mod first (see [Requirements](#requirements)). Claude Desktop is not needed: the mod runs inside the Claude Code process that the VS Code chat starts.
+> This extension does nothing on its own. It has no data source of its own and only shows what the **session-band mod** writes. Installed without the mod, the status bar shows only `session-band mod not found`; click it for these setup steps. Install the mod first (see [Requirements](#requirements)). Claude Desktop is not needed: the mod runs inside the Claude Code process that the VS Code chat starts.
 
 <img src="screenshots/statusbar.png" alt="Claude Status in the VS Code status bar" width="686">
 
@@ -25,17 +25,17 @@ Only the part that needs attention takes a colour, as in the band. The section s
 
 Plan limits belong to the account, not to one chat. The extension shows the highest value of the current window across all live chats, so a chat you just reopened shows the limits before its first turn ends.
 
-At the end sits the band's handoff button. It shows `handoff`, then `handoff queued` and `handoff running` while the session-handoff skill runs, then `clear and continue` once the handoff is ready, and `clearing` while the chat clears. Click `handoff` or `clear and continue` to run that step in the chat, as the band buttons do. The click writes a command file to `~/.claude/mods-data/cache-status/commands/`. The mod picks it up within 2 seconds.
+At the end sits the band's handoff button. It shows `handoff`, then `handoff queued` and `handoff running` while the session-handoff skill runs, then `clear and continue` once the handoff is ready, and `clearing` while the chat clears. Click `handoff` or `clear and continue` to run that step in the chat, as the band buttons do. The click writes a command file to `~/.claude/mods-data/session-band/commands/`. The mod picks it up within 2 seconds.
 
 Hover a part for the explanations and for when each plan limit resets (`5h resets 1:50pm (in 2h15m) · w resets Fri 9:00am (in 3d21h)`). Click it, or run **Claude Status: Show All Sessions**, for every live Claude Code session on this machine, in /board order.
 
 ## Requirements
 
-- The cache-status mod, at a version that writes live files (`~/.claude/mods-data/cache-status/live/`). Install it in Claude Code:
+- The session-band mod, at a version that writes live files (`~/.claude/mods-data/session-band/live/`). Install it in Claude Code:
 
   ```
   /plugin marketplace add IT-BAER/claude-forge
-  /plugin install cache-status@claude-forge
+  /plugin install session-band@claude-forge
   ```
 
   Update it with `/plugin marketplace update claude-forge`. A mod install or update reaches a chat only after you restart that chat.
@@ -43,12 +43,12 @@ Hover a part for the explanations and for when each plan limit resets (`5h reset
 
 ## Install
 
-Install the cache-status mod first (see [Requirements](#requirements)). There is no Marketplace listing. Build and install the .vsix:
+Install the session-band mod first (see [Requirements](#requirements)). There is no Marketplace listing. Build and install the .vsix:
 
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.12.vsix
+code --install-extension claude-status-0.2.13.vsix
 ```
 
 Then run **Developer: Reload Window**.
