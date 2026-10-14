@@ -91,8 +91,41 @@ const RESUME_LINE = /^\s*Continue from session handoff:/i
 // session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
 const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)[^"'\s/]*\.md|\/handoffs\/[^"'\s]*\.md)/
 
+// A shell path as an absolute one: Git Bash /d/x is D:/x, ~ is home, relative is under dir
+function shellPath(p, dir) {
+  p = p.replace(/\\/g, '/').replace(/^\/([a-z])\//i, (_, d) => d.toUpperCase() + ':/')
+  if (p.startsWith('~/')) return home.replace(/\\/g, '/') + p.slice(1)
+  if (/^[a-z]:\//i.test(p) || p.startsWith('/')) return p
+  return `${dir.replace(/\\/g, '/').replace(/\/$/, '')}/${p.replace(/^\.\//, '')}`
+}
+
+const SHELL_WRITE = />>?|\btee\b|\bsed\s+-i|\b(?:Set|Add)-Content\b|\bOut-File\b/i
+const SHELL_CD = /^\s*(?:cd|Set-Location)\s+['"]?([^'"\s]+)['"]?\s*$/i
+
+// The handoff file a Bash or PowerShell command writes: a path after >, tee, sed -i,
+// Set-Content, Add-Content or Out-File in one command step. shortcut: no quote-aware splitting.
+function shellHandoffWrite(command) {
+  let dir = S.cwd
+  for (const step of command.split(/&&|\|\|?|;|\n/)) {
+    const cd = SHELL_CD.exec(step)
+    if (cd) {
+      dir = shellPath(cd[1], dir)
+      continue
+    }
+    const w = SHELL_WRITE.exec(step)
+    const m = w && HANDOFF_FILE.exec(step.slice(w.index + w[0].length).replace(/\\/g, '/'))
+    if (m) return shellPath(m[0], dir)
+  }
+  return ''
+}
+
 // Notes a write to a handoff file; true when the write was one
 function noteHandoffFile(e) {
+  if (e.tool === 'Bash' || e.tool === 'PowerShell') {
+    const path = shellHandoffWrite(String((e.input && e.input.command) || e.command || ''))
+    if (path) H.file = H.lastFile = path
+    return !!path
+  }
   if (e.tool !== 'Write' && e.tool !== 'Edit') return false
   let raw = ''
   try {

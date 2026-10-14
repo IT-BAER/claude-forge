@@ -240,6 +240,52 @@ test('the resume turn after clear and continue does not arm a new handoff', asyn
   expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
 })
 
+// Shell writes: the Bash or PowerShell tool, relative to the session cwd or after a cd
+const shellWrites = [
+  { tool: 'Bash', path: 'd:/VSC/demo/.claude/session-handoff.md', command: 'TS=$(date -u +%Y-%m-%dT%H:%M:%SZ) && cat > .claude/session-handoff.md <<EOF\n<!-- handoff: $TS -->\nEOF' },
+  { tool: 'Bash', path: 'D:/p/.claude/session-handoff.md', command: 'cd /d/p && printf "%s" "$H" | tee .claude/session-handoff.md >/dev/null' },
+  { tool: 'PowerShell', path: 'D:/p/.claude/session-handoff.md', command: "Set-Content -Path 'D:\\p\\.claude\\session-handoff.md' -Value $text" },
+]
+for (const w of shellWrites) {
+  test(`a handoff file written through ${w.tool} is ready (${w.command.slice(0, 24)})`, async ($, on) => {
+    const { files, live } = await start($, on, (on) => {
+      on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+      on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+      on('tool.call', (_: any, e: any) => { if (e.tool === w.tool) files[w.path] = handoffFile('active'); return { result: { text: '' } } })
+    })
+    await $.turn.start({ turnId: 't1' } as any)
+    await $.tool.call({ tool: w.tool, command: w.command } as any)
+    await $.turn.complete({ reason: 'answer', answer: 'Handoff written.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+    expect(live().handoff).toBe('ready')
+  })
+}
+
+test('reading a handoff file through Bash is not a handoff write', async ($, on) => {
+  const { live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', () => ({ result: { text: '' } }))
+  }, { [HF]: handoffFile('active') })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Bash', command: `cat ${HF} > /tmp/copy.md; grep -n status /d/p/.claude/session-handoff.md 2>/dev/null` } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'Read it.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('idle')
+})
+
+test('consuming a handoff with sed -i through Bash does not turn the answer into a new handoff', async ($, on) => {
+  const { files, live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Bash') files[HF] = handoffFile('consumed'); return { result: { text: '' } } })
+  }, { [HF]: handoffFile('active') })
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Skill', skill: 'session-handoff' } as any)
+  await $.tool.call({ tool: 'Bash', command: "cd /d/p && sed -i '1s/status: active/status: consumed/' .claude/session-handoff.md && head -1 .claude/session-handoff.md" } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'Handoff consumed. '.repeat(30), durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('idle')
+  expect(Object.keys(files).some((p) => p.includes('/handoffs/'))).toBe(false)
+})
+
 test('a denied edit of a handoff file is not a handoff write', async ($, on) => {
   const { live } = await start($, on, (on) => {
     on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
