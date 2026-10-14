@@ -82,7 +82,10 @@ const H = {
   fromFile: false, // H.text came from that file: the fresh chat reads it by path
   continuing: false,
   resuming: false, // the last prompt was a resume line: its skill call consumes, not creates
+  announce: false, // a handoff file caught mid-turn: its toast waits for the turn end
 }
+// Clear and continue is offered only once Claude has stopped working
+const ready = () => !!H.text && !S.working
 const RESUME_LINE = /^\s*Continue from session handoff:/i
 
 // session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
@@ -129,11 +132,13 @@ async function captureHandoffFile($, path = H.file, early = false) {
     H.text = text
     H.path = path
     H.fromFile = true
-    if (!known) $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    if (!known) H.announce = true
     if (early) {
       $.ui.invalidate('ui.render')
       return true
     }
+    if (H.announce) $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    H.announce = false
     const askAfter = H.askAfter
     H.armed = false
     H.notTurn = ''
@@ -538,6 +543,7 @@ async function followSessionId($) {
   S.keepWarm = false
   H.armed = false
   H.file = H.lastFile = '' // the previous chat's handoff file is not this chat's
+  H.announce = false
   await restoreSession($)
 }
 
@@ -548,7 +554,7 @@ function outsidePath(dir, id) {
 // What the band's handoff button shows, in the order the band picks it
 function handoffState() {
   if (H.continuing) return 'clearing'
-  if (H.text) return 'ready'
+  if (ready()) return 'ready'
   if (handoffPending) return 'queued'
   if (H.armed) return 'running'
   return 'idle'
@@ -1033,7 +1039,7 @@ export function register(on) {
     const busy = handoffPending || H.armed
     const handoff = Button({ key: 'handoff', label: handoffPending ? 'handoff queued' : H.armed ? 'handoff running' : 'handoff', hotkey: 'h', plain: true, dimColor: busy, onPress: () => runHandoff($) })
     let right = handoff
-    if (H.text || H.continuing) {
+    if (ready() || H.continuing) {
       const go = Button({ key: 'continue', label: H.continuing ? 'clearing' : 'clear and continue', hotkey: 'c', plain: true, onPress: () => clearAndContinue($) })
       right = Box({ flexDirection: 'row', columnGap: 2, children: [go, handoff] })
     }
@@ -1077,7 +1083,7 @@ function footerLabel() {
   else if (st.kind === 'cold' && big) parts.push(`cache cold · rewrite ≈ ${money(rewriteCost(S.ctx, S.model, ttlMin()))}`)
   const high = allLimits().filter((l) => (l.percentUsed || 0) >= 80)
   if (high.length) parts.push(limitsText(high))
-  if (H.text) parts.push(`handoff ready · /${names.handoff} continue`)
+  if (ready()) parts.push(`handoff ready · /${names.handoff} continue`)
   return parts.join(' · ')
 }
 

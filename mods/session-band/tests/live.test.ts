@@ -8,6 +8,7 @@ const NOW = 1_000_000
 async function start($: any, on: any, extra: (on: any) => void = () => {}, seed: Record<string, string> = {}) {
   const files: Record<string, string> = { ...seed }
   const ran: string[] = []
+  const toasts: string[] = []
   const sid = { value: 'sess-1' }
   const clock = mock.clock(on, { now: NOW })
   mock.store(on)
@@ -23,14 +24,14 @@ async function start($: any, on: any, extra: (on: any) => void = () => {}, seed:
   on('agent.list', () => ({ value: [] }))
   on('command.list', () => ({ value: [{ name: 'session-handoff', description: '', source: 'user' }] }))
   on('command.run', (_: any, e: any) => { ran.push(e.command); return {} })
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
   on('ui.invalidate', () => ({ value: undefined }))
   on('fs.exists', (_: any, e: any) => ({ value: norm(e.path) in files }))
   on('fs.read', (_: any, e: any) => ({ value: files[norm(e.path)] ?? '' }))
   on('fs.write', (_: any, e: any) => { files[norm(e.path)] = e.text; return { value: undefined } })
   await $.session.start({ cwd: 'd:\\VSC\\demo', surface: null, isInteractive: true })
   const live = (id = 'sess-1') => JSON.parse(files[`${BASE}/live/${id}.json`]!)
-  return { files, ran, clock, live, sid }
+  return { files, ran, clock, live, sid, toasts }
 }
 
 test('heartbeat writes a live status file', async ($, on) => {
@@ -168,19 +169,36 @@ test('a handoff the skill writes to a file is ready', async ($, on) => {
   expect(live().handoff).toBe('ready')
 })
 
-test('a handoff file is ready as soon as it is written, before the turn ends', async ($, on) => {
-  const { files, clock, live } = await start($, on, (on) => {
-    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
-    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
-    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+for (const reason of ['answer', 'aborted'] as const) {
+  test(`a handoff file written mid-turn offers clear and continue only once the turn ends (${reason})`, async ($, on) => {
+    const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+    const { files, clock, live, toasts } = await start($, on, (on) => {
+      on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+      on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+      on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+      on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+      on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+    }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+    const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+    const offered = async () => {
+      const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
+      // handoff alone, or clear and continue beside it
+      const has = all(await ui.drawn()).filter((n) => n.type === 'Button').length === 2
+      await ui.unmount()
+      return has
+    }
+    await $.turn.start({ turnId: 't1' } as any)
+    await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+    await clock.advance(2000)
+    expect(await offered()).toBe(false)
+    expect(live().handoff).not.toBe('ready')
+    expect(toasts.some((t) => /clear and continue/.test(t))).toBe(false)
+    await $.turn.complete({ reason, answer: 'Handoff written.', durationMs: 1, isAborted: reason === 'aborted', turnId: 't1' } as any)
+    expect(await offered()).toBe(true)
+    expect(live().handoff).toBe('ready')
+    expect(toasts.filter((t) => /clear and continue/.test(t)).length).toBe(1)
   })
-  await $.turn.start({ turnId: 't1' } as any)
-  await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
-  await clock.advance(2000)
-  expect(live().handoff).toBe('ready')
-  await $.turn.complete({ reason: 'answer', answer: 'Handoff written.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
-  expect(live().handoff).toBe('ready')
-})
+}
 
 test('a resume turn that calls the skill but never edits the file saves no handoff', async ($, on) => {
   const { files, live } = await start($, on, (on) => {
