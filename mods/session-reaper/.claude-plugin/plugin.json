@@ -1,11 +1,12 @@
 {
   "name": "session-reaper",
-  "description": "Archives Claude Code desktop sessions idle past a limit and stops idle process trees left behind by ended sessions",
+  "description": "Frees the memory of idle Claude Code desktop sessions by stopping their process trees (the sessions stay in the sidebar), optionally archives them, and stops idle process trees left behind by ended sessions",
   "author": {
     "name": "IT-BAER"
   },
   "userConfig": {
-    "idleMinutes": { "type": "number", "title": "Archive after idle minutes", "description": "Archive a session with no activity for this many minutes. Running and pinned sessions are never archived.", "default": 60 },
+    "idleMinutes": { "type": "number", "title": "Release after idle minutes", "description": "Stop the process tree of a session with no activity for this many minutes. The session stays in the sidebar and restarts when opened. Running sessions and sessions with a working side session are never released.", "default": 60 },
+    "archiveMinutes": { "type": "number", "title": "Archive after idle minutes (0 = never)", "description": "Also archive a session with no activity for this many minutes. Running and pinned sessions are never archived.", "default": 0 },
     "orphanMinutes": { "type": "number", "title": "Orphan minimum age (minutes)", "description": "Stop a left-behind process tree only when every process in it is at least this old.", "default": 60 },
     "cpuIdleMs": { "type": "number", "title": "Idle CPU limit (ms per check)", "description": "A left-behind process tree counts as idle when each process used at most this much CPU time since the previous check.", "default": 1000 },
     "intervalMinutes": { "type": "number", "title": "Check interval (minutes)", "description": "How often the active session checks.", "default": 5 }

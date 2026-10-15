@@ -1,10 +1,23 @@
-# Without -Kill: prints every process as JSON {pid, ppid, name, created, cpu}.
+# Without arguments: prints every process as JSON {pid, ppid, name, created, cpu}.
 # created = creation time as UTC FILETIME, cpu = kernel+user time in 100 ns units.
+# -Self: prints {pid, created} of the nearest claude.exe above this script (the session's own process).
 # -Kill "pid:created,...": stops each process only while its creation time still matches (no PID reuse hits).
-param([string]$Kill)
+param([string]$Kill, [switch]$Self)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $props = 'ProcessId', 'ParentProcessId', 'Name', 'CreationDate', 'KernelModeTime', 'UserModeTime'
+if ($Self) {
+  $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -Property $props
+  for ($hops = 0; $p -and $hops -lt 64; $hops++) {
+    if ($p.Name -ieq 'claude.exe') {
+      [Console]::Out.Write((ConvertTo-Json -InputObject ([ordered]@{ pid = [int]$p.ProcessId; created = [string]$p.CreationDate.ToFileTimeUtc() }) -Compress))
+      return
+    }
+    $p = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$p.ParentProcessId)" -Property $props
+  }
+  [Console]::Error.Write('no claude.exe above this process')
+  exit 1
+}
 if (-not $Kill) {
   $rows = foreach ($p in Get-CimInstance Win32_Process -Property $props) {
     if (-not $p.CreationDate) { continue }

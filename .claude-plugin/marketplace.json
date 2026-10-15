@@ -18,7 +18,7 @@
     {
       "name": "session-reaper",
       "source": "./mods/session-reaper",
-      "description": "Archives idle Claude desktop sessions and stops idle process trees left behind by ended sessions (Windows)"
+      "description": "Frees the memory of idle Claude desktop sessions by stopping their process trees (sessions stay in the sidebar), optionally archives them, and stops idle process trees left behind by ended sessions (Windows)"
     }
   ]
 }
