@@ -175,6 +175,19 @@ test('a handoff the skill writes to a file is ready', async ($, on) => {
   expect(live().handoff).toBe('ready')
 })
 
+test('an answer that offers an out-of-date handoff again makes it ready again', async ($, on) => {
+  const path = 'D:/home/t/.claude/handoffs/demo/2026-10-16T204534-PC.md'
+  const { live } = await start($, on, (on) => {
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
+  }, { [path]: handoffFile('active') })
+  await $.prompt.submit({ text: 'still broken?', origin: { kind: 'composer' } } as any)
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.turn.complete({ reason: 'answer', answer: 'Not built yet. Run /clear, then paste:\n\n```\nContinue from session handoff: read ~/.claude/handoffs/demo/2026-10-16T204534-PC.md, consume it with session-handoff, do not re-explore.\n```', durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  expect(live().handoff).toBe('ready')
+})
+
 for (const reason of ['answer', 'aborted'] as const) {
   test(`a handoff file written mid-turn offers clear and continue only once the turn ends (${reason})`, async ($, on) => {
     const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })

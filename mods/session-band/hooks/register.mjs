@@ -139,6 +139,14 @@ function noteHandoffFile(e) {
   return !!m
 }
 
+// The handoff file an answer offers again after a later message made it out of date:
+// "Continue from session handoff: read <path>"
+const OFFERED = /Continue from session handoff:\s*read\s+`?([^`"'\s,]+\.md)/i
+function offeredHandoff(answer) {
+  const m = OFFERED.exec(String(answer || ''))
+  return m && HANDOFF_FILE.test(m[1].replace(/\\/g, '/')) ? shellPath(m[1], S.cwd) : ''
+}
+
 // A header status other than active (consumed) retires a handoff file.
 // Free-hand handoffs often lack the skill's <!-- handoff: --> header.
 function retired(text) {
@@ -910,6 +918,7 @@ export function register(on) {
       H.notTurn = ''
       H.askAfter = false
     } else if (H.armed && e.turnId !== H.notTurn) await captureHandoff($, e)
+    else if (!H.text && !H.resuming && e.reason === 'answer' && offeredHandoff(e.answer)) await captureHandoffFile($, offeredHandoff(e.answer))
     refreshModelLimits($).catch(() => {})
     await heartbeat($, true)
     $.ui.invalidate('ui.render')
