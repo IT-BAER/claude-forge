@@ -6,7 +6,7 @@ A Claude Code mod for the Claude desktop app on Windows. Every few minutes it:
 2. Optionally archives sessions idle for longer than a second limit (`archiveMinutes`, off by default). Running and pinned sessions are skipped; the app itself also refuses sessions that are open on screen or still have background work. Archived sessions can be restored from the Archived list.
 3. Stops process trees that a session left behind. It records every process a `claude.exe` started (MCP servers, dev servers, shells). Once that `claude.exe` is gone, a tree is stopped only when every process in it is at least 60 minutes old and used almost no CPU since the previous check. `chrome.exe`, `msedge.exe`, `Code.exe`, `claude.exe`, `explorer.exe` and `WindowsTerminal.exe` are never stopped (a released session's own `claude.exe` is the one exception).
 
-Every open session loads the mod. Each one reports its own `claude.exe` to the plugin store once, so the sessions can be mapped to their processes; only one session does the work (a heartbeat in the plugin store picks it).
+Every open session loads the mod. Each one reports its own `claude.exe` to the plugin store once, so the sessions can be mapped to their processes; only one session does the work (a heartbeat in the plugin store picks it). A desktop session takes the work over from a CLI or VS Code session, which cannot release or archive sessions; those lead only while no desktop session runs.
 
 ## Why it exists
 

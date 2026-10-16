@@ -5,7 +5,8 @@ const MIN = 60_000
 const TICK = 5 * MIN
 
 type Row = { pid: number; ppid: number; name: string; created: string; cpu: number }
-type World = { id?: string; self?: Row; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[] }
+// desk: false is a host without the app's ccd_session_mgmt server (CLI, VS Code).
+type World = { id?: string; self?: Row; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[]; desk?: boolean }
 
 // Windows FILETIME (100 ns since 1601) as procs.ps1 prints it.
 const ft = (ms: number) => String((ms + 11_644_473_600_000) * 10_000)
@@ -29,6 +30,7 @@ async function start($: any, on: any, w: World) {
   on('ui.log', () => ({ value: undefined }))
   on('mcp.call', (_: any, e: any) => {
     const reply = (text: string) => ({ value: { isError: false, content: [{ type: 'text', text }] } })
+    if (w.desk === false) return { value: { isError: true, content: [] } }
     if (e.tool === 'list_sessions') return reply(JSON.stringify(w.sessions ?? []))
     if (e.tool === 'get_session') return reply(JSON.stringify({ sessionId: w.id ?? 'me' }))
     archived.push(e.args.session_id)
@@ -110,7 +112,7 @@ test('with archiveMinutes, archives sessions idle past it, never running, pinned
 test('a second session leaves the work to a live leader and takes over a stale one', { options: { archiveMinutes: 60 } }, async ($, on) => {
   const w: World = {
     id: 'second',
-    store: { leader: { id: 'first', at: NOW } },
+    store: { leader: { id: 'first', at: NOW, desk: true } },
     sessions: [session('old', 90)],
   }
   const { clock, archived } = await start($, on, w)
@@ -118,6 +120,32 @@ test('a second session leaves the work to a live leader and takes over a stale o
   expect(archived).toEqual([])
   await clock.advance(3 * TICK)
   expect(archived).toContain('old')
+})
+
+test('a desktop session takes over a live leader that cannot reach the app', async ($, on) => {
+  const procs = [row(10, 1, 'claude.exe', 120), row(11, 10, 'node.exe', 120)]
+  const w: World = {
+    id: 'desktop',
+    procs,
+    store: { leader: { id: 'vscode', at: NOW }, owned: { old: owned(procs[0]) } },
+    sessions: [session('old', 90)],
+  }
+  const { clock, pids } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(pids()).toEqual([10, 11])
+})
+
+test('a session that cannot reach the app leaves a live desktop leader alone, and leads once it is stale', async ($, on) => {
+  const w: World = {
+    id: 'vscode', desk: false,
+    procs: [row(10, 1, 'claude.exe', 120), row(11, 10, 'node.exe', 120), row(12, 11, 'node.exe', 120)],
+    store: { leader: { id: 'desktop', at: NOW, desk: true } },
+  }
+  const { clock, pids } = await start($, on, w)
+  await clock.advance(3 * TICK)
+  w.procs = w.procs!.filter(r => r.pid !== 10)
+  await clock.advance(TICK)
+  expect(pids()).toEqual([11, 12])
 })
 
 test('stops an idle tree whose claude.exe ended, keeping chrome.exe', async ($, on) => {

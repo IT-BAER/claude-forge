@@ -38,12 +38,13 @@ function text(res: { isError?: boolean; content: readonly unknown[] }) {
   return res.isError || !t ? undefined : t.text
 }
 
-// shortcut: last writer wins on a simultaneous takeover; harmless, both act on the same state.
-async function isLeader($: Engine, now: number, cfg: Cfg) {
+// desk: the session reaches the app's session tools. A desk session takes over a live leader without
+// them (CLI, VS Code, a version before the flag). shortcut: last writer wins on a simultaneous takeover.
+async function isLeader($: Engine, now: number, cfg: Cfg, desk: boolean) {
   const me = await $.session.id()
-  const lead = (await $.store.get('leader')) as { id: string; at: number } | undefined
-  if (lead && lead.id !== me && now - lead.at < 2.5 * cfg.intervalMs) return false
-  await $.store.set('leader', { id: me, at: now })
+  const lead = (await $.store.get('leader')) as { id: string; at: number; desk?: boolean } | undefined
+  if (lead && lead.id !== me && now - lead.at < 2.5 * cfg.intervalMs && (lead.desk || !desk)) return false
+  await $.store.set('leader', { id: me, at: now, desk })
   return true
 }
 
@@ -168,7 +169,7 @@ async function stopOrphans($: Engine, now: number, cfg: Cfg) {
 async function tick($: Engine, cfg: Cfg, self: { v?: Self }) {
   const now = await $.clock.now()
   try { await reportSelf($, self) } catch (err) { log($, `self report failed: ${String(err).slice(0, 200)}`) }
-  if (!(await isLeader($, now, cfg))) return
+  if (!(await isLeader($, now, cfg, !!self.v))) return
   const sessions = await listSessions($)
   if (cfg.archiveMs) try { await archiveIdle($, now, cfg, sessions) } catch (err) { log($, `archive failed: ${String(err).slice(0, 200)}`) }
   try { await releaseIdle($, now, cfg, sessions, self.v?.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
