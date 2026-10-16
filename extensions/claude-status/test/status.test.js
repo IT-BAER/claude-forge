@@ -3,7 +3,13 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { readLive, pickSession, render, tooltip, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups, modMissing } = require('../status')
+const { readLive, pickSession, render, tooltip, boardItems, handoffItem, writeCommand, readVscodeSessions, accountLimits, groups, modMissing, claudeDir } = require('../status')
+
+test('claudeDir follows CLAUDE_CONFIG_DIR, else ~/.claude', () => {
+  assert.equal(claudeDir({ CLAUDE_CONFIG_DIR: 'C:\\u\\.claude-jeff' }, 'C:\\u'), 'C:\\u\\.claude-jeff')
+  assert.equal(claudeDir({}, 'C:\\u'), path.join('C:\\u', '.claude'))
+  assert.equal(claudeDir({ CLAUDE_CONFIG_DIR: '' }, 'C:\\u'), path.join('C:\\u', '.claude'))
+})
 
 const MIN = 60000
 const NOW = 10_000_000_000

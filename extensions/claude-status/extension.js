@@ -1,12 +1,13 @@
 const vscode = require('vscode')
 const os = require('node:os')
 const path = require('node:path')
-const { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, handoffItem, writeCommand, modMissing } = require('./status')
+const { claudeDir, GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, handoffItem, writeCommand, modMissing } = require('./status')
 
-const DATA_DIR = path.join(os.homedir(), '.claude', 'mods-data', 'session-band')
+const CLAUDE_DIR = claudeDir(process.env, os.homedir())
+const DATA_DIR = path.join(CLAUDE_DIR, 'mods-data', 'session-band')
 const LIVE_DIR = path.join(DATA_DIR, 'live')
 const COMMAND_DIR = path.join(DATA_DIR, 'commands')
-const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions')
+const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions')
 const SETUP_URL = 'https://github.com/IT-BAER/claude-forge/tree/main/extensions/claude-status#requirements'
 const REFRESH_MS = 2000
 const PENDING_MS = 15000 // how long a click shows its own label before the mod answers

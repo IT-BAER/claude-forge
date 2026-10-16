@@ -248,4 +248,9 @@ function writeCommand(dir, id, cmd, now) {
   fs.writeFileSync(path.join(dir, id + '.json'), JSON.stringify({ cmd, at: now }))
 }
 
-module.exports = { GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, cacheState, handoffItem, writeCommand, modMissing }
+// The Claude Code config dir this VS Code window's account uses
+function claudeDir(env, home) {
+  return env.CLAUDE_CONFIG_DIR || path.join(home, '.claude')
+}
+
+module.exports = { claudeDir, GAP, readLive, readVscodeSessions, pickSession, accountLimits, groups, render, tooltip, boardItems, cacheState, handoffItem, writeCommand, modMissing }

@@ -48,7 +48,7 @@ Install the session-band mod first (see [Requirements](#requirements)). There is
 ```
 cd extensions/claude-status
 npx @vscode/vsce package
-code --install-extension claude-status-0.2.13.vsix
+code --install-extension claude-status-0.2.14.vsix
 ```
 
 Then run **Developer: Reload Window**.
