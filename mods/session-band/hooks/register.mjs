@@ -51,6 +51,7 @@ const names = { cache: 'cache', keepwarm: 'keepwarm', board: 'board', handoff: '
 
 let now = 0
 let home = ''
+let claudeDir = './.claude' // CLAUDE_CONFIG_DIR, else ~/.claude: one profile's data per account
 let lastHeartbeat = 0
 let rec = { on: false, strict: false }
 let mask = (s) => s
@@ -204,7 +205,7 @@ function fileStamp(ms) {
 
 async function saveHandoff($, text) {
   const project = basename(S.cwd).replace(/[^A-Za-z0-9-]+/g, '-') || 'session'
-  const path = `${home || '.'}/.claude/mods-data/session-band/handoffs/${fileStamp(now)}-${project}-${S.id.slice(0, 8)}.md`.replace(/\\/g, '/')
+  const path = `${claudeDir}/mods-data/session-band/handoffs/${fileStamp(now)}-${project}-${S.id.slice(0, 8)}.md`.replace(/\\/g, '/')
   await $.fs.write(path, text + '\n')
   return path
 }
@@ -461,7 +462,7 @@ async function registerCommand($, name, description, argumentHint, immediate) {
 
 async function readRecording($) {
   try {
-    const path = (home || '.') + '/.claude/mods-data/recording.json'
+    const path = claudeDir + '/mods-data/recording.json'
     if (!(await $.fs.exists(path))) {
       rec = { on: false, strict: false }
     } else {
@@ -541,7 +542,7 @@ async function restoreSession($) {
 // When the transcript's last model response was written. Not the file's mtime:
 // a resume appends rows. Claude Code names the folder after the launch cwd.
 async function lastResponseAt($) {
-  const path = `${home}/.claude/projects/${S.cwd.replace(/[^A-Za-z0-9]/g, '-')}/${S.id}.jsonl`.replace(/\\/g, '/')
+  const path = `${claudeDir}/projects/${S.cwd.replace(/[^A-Za-z0-9]/g, '-')}/${S.id}.jsonl`.replace(/\\/g, '/')
   let lines = []
   try {
     lines = (await $.fs.read(path)).split('\n')
@@ -581,7 +582,7 @@ async function followSessionId($) {
 }
 
 function outsidePath(dir, id) {
-  return `${home}/.claude/mods-data/session-band/${dir}/${id}.json`.replace(/\\/g, '/')
+  return `${claudeDir}/mods-data/session-band/${dir}/${id}.json`.replace(/\\/g, '/')
 }
 
 // What the band's handoff button shows, in the order the band picks it
@@ -767,6 +768,7 @@ export function register(on) {
   on('session.start', async ($, e, next) => {
     now = await $.clock.now()
     home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    claudeDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${home || '.'}/.claude`
     S.id = await $.session.id()
     S.cwd = await $.session.cwd()
     S.label = basename(S.cwd)

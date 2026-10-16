@@ -5,14 +5,14 @@ const LIVE = `${BASE}/live/sess-1.json`
 const CMD = `${BASE}/commands/sess-1.json`
 const NOW = 1_000_000
 
-async function start($: any, on: any, extra: (on: any) => void = () => {}, seed: Record<string, string> = {}) {
+async function start($: any, on: any, extra: (on: any) => void = () => {}, seed: Record<string, string> = {}, env: Record<string, string> = {}) {
   const files: Record<string, string> = { ...seed }
   const ran: string[] = []
   const toasts: string[] = []
   const sid = { value: 'sess-1' }
   const clock = mock.clock(on, { now: NOW })
   mock.store(on)
-  mock.env(on, { USERPROFILE: 'D:\\home\\t' })
+  mock.env(on, { USERPROFILE: 'D:\\home\\t', ...env })
   const norm = (p: string) => p.replace(/\\/g, '/')
   on('session.id', () => ({ value: sid.value }))
   on('session.cwd', () => ({ value: 'd:\\VSC\\demo' }))
@@ -43,6 +43,12 @@ test('heartbeat writes a live status file', async ($, on) => {
   expect(typeof live().rewriteUsd).toBe('number')
   expect(live().handoff).toBe('idle')
   expect(live().ended).toBe(false)
+})
+
+test('CLAUDE_CONFIG_DIR moves the live file into that profile', async ($, on) => {
+  const { files } = await start($, on, () => {}, {}, { CLAUDE_CONFIG_DIR: 'D:\\home\\t\\.claude-jeff' })
+  expect(JSON.parse(files['D:/home/t/.claude-jeff/mods-data/session-band/live/sess-1.json']!).id).toBe('sess-1')
+  expect(files[LIVE]).toBeUndefined()
 })
 
 test('session end marks the live file as ended, and later heartbeats keep it so', async ($, on) => {
