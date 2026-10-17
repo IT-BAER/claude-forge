@@ -6,7 +6,8 @@ const TICK = 5 * MIN
 
 type Row = { pid: number; ppid: number; name: string; created: string; cpu: number }
 // desk: false is a host without the app's ccd_session_mgmt server (CLI, VS Code).
-type World = { id?: string; self?: Row; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[]; desk?: boolean }
+// app: the desktop app's main claude.exe above the session's own (null: none, as under CLI or VS Code).
+type World = { id?: string; self?: Row; app?: Row | null; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[]; desk?: boolean }
 
 // Windows FILETIME (100 ns since 1601) as procs.ps1 prints it.
 const ft = (ms: number) => String((ms + 11_644_473_600_000) * 10_000)
@@ -16,6 +17,8 @@ const ago = (min: number) => new Date(NOW - min * MIN).toISOString()
 const owned = (r: Row) => ({ pid: r.pid, created: r.created })
 const session = (sessionId: string, idleMin: number, extra: Record<string, unknown> = {}) =>
   ({ sessionId, isArchived: false, isRunning: false, lastActivityAt: ago(idleMin), ...extra })
+const APP = row(2, 0, 'claude.exe', 300)
+const appKey = (r: Row) => `${r.pid}:${r.created}`
 
 async function start($: any, on: any, w: World) {
   const clock = mock.clock(on, { now: NOW })
@@ -24,6 +27,7 @@ async function start($: any, on: any, w: World) {
   const killed: string[] = []
   const runs: { exe: string; cwd?: string }[] = []
   const self = w.self ?? row(1, 0, 'claude.exe', 200)
+  const app = w.app === undefined ? APP : w.app
   mock.env(on, { SystemRoot: String.raw`C:\work\evil` })
   on('session.id', () => ({ value: w.id ?? 'me' }))
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
@@ -40,7 +44,7 @@ async function start($: any, on: any, w: World) {
     runs.push({ exe: e.argv[0], cwd: e.init?.cwd })
     const i = e.argv.indexOf('-Kill')
     if (i >= 0) killed.push(...String(e.argv[i + 1]).split(','))
-    const stdout = i >= 0 ? '[]' : e.argv.includes('-Self') ? JSON.stringify(owned(self)) : JSON.stringify(w.procs ?? [])
+    const stdout = i >= 0 ? '[]' : e.argv.includes('-Self') ? JSON.stringify({ ...owned(self), app: app && owned(app) }) : JSON.stringify(w.procs ?? [])
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   await $.session.start({ cwd: 'C:/work', surface: null, isInteractive: true })
@@ -109,10 +113,10 @@ test('with archiveMinutes, archives sessions idle past it, never running, pinned
   expect(archived).toEqual(['old'])
 })
 
-test('a second session leaves the work to a live leader and takes over a stale one', { options: { archiveMinutes: 60 } }, async ($, on) => {
+test('a second session leaves the work to a live leader of its app and takes over a stale one', { options: { archiveMinutes: 60 } }, async ($, on) => {
   const w: World = {
     id: 'second',
-    store: { leader: { id: 'first', at: NOW, desk: true } },
+    store: { apps: { [appKey(APP)]: { id: 'first', at: NOW } } },
     sessions: [session('old', 90)],
   }
   const { clock, archived } = await start($, on, w)
@@ -120,6 +124,27 @@ test('a second session leaves the work to a live leader and takes over a stale o
   expect(archived).toEqual([])
   await clock.advance(3 * TICK)
   expect(archived).toContain('old')
+})
+
+test('releases idle sessions of its own app while another app instance has a live leader', async ($, on) => {
+  const other = row(3, 0, 'claude.exe', 300)
+  const procs = [row(10, 2, 'claude.exe', 120), row(11, 10, 'node.exe', 120)]
+  const w: World = {
+    id: 'mine', procs,
+    store: { leader: { id: 'theirs', at: NOW, desk: true }, apps: { [appKey(other)]: { id: 'theirs', at: NOW } }, owned: { old: owned(procs[0]) } },
+    sessions: [session('old', 90)],
+  }
+  const { clock, pids } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(pids()).toEqual([10, 11])
+})
+
+test('a desktop session with no app process above it still releases idle sessions', async ($, on) => {
+  const procs = [row(10, 1, 'claude.exe', 120), row(11, 10, 'node.exe', 120)]
+  const w: World = { app: null, procs, store: { owned: { old: owned(procs[0]) } }, sessions: [session('old', 90)] }
+  const { clock, pids } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(pids()).toEqual([10, 11])
 })
 
 test('a desktop session takes over a live leader that cannot reach the app', async ($, on) => {

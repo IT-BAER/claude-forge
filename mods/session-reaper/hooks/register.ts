@@ -38,8 +38,8 @@ function text(res: { isError?: boolean; content: readonly unknown[] }) {
   return res.isError || !t ? undefined : t.text
 }
 
-// desk: the session reaches the app's session tools. A desk session takes over a live leader without
-// them (CLI, VS Code, a version before the flag). shortcut: last writer wins on a simultaneous takeover.
+// Leader for orphan cleanup, shared by every host. desk: the session reaches the app's session tools; a desk
+// session takes over a live leader without them. shortcut: last writer wins on a simultaneous takeover.
 async function isLeader($: Engine, now: number, cfg: Cfg, desk: boolean) {
   const me = await $.session.id()
   const lead = (await $.store.get('leader')) as { id: string; at: number; desk?: boolean } | undefined
@@ -48,14 +48,28 @@ async function isLeader($: Engine, now: number, cfg: Cfg, desk: boolean) {
   return true
 }
 
+// Leader for releasing and archiving, one per app instance: list_sessions only returns the caller's own
+// app's sessions. app is the instance's main claude.exe; entries of closed instances are pruned on write.
+async function isAppLeader($: Engine, now: number, cfg: Cfg, app: string) {
+  const me = await $.session.id()
+  const apps = ((await $.store.get('apps')) ?? {}) as Record<string, { id: string; at: number }>
+  const lead = apps[app]
+  if (lead && lead.id !== me && now - lead.at < 2.5 * cfg.intervalMs) return false
+  for (const [k, v] of Object.entries(apps)) if (now - v.at >= 2.5 * cfg.intervalMs) delete apps[k]
+  apps[app] = { id: me, at: now }
+  await $.store.set('apps', apps)
+  return true
+}
+
 // Each session publishes its own claude.exe once; the leader needs it to release the session later.
-type Self = { sessionId: string; proc: Proc }
+type Self = { sessionId: string; proc: Proc; app: string }
 async function reportSelf($: Engine, self: { v?: Self }) {
   if (!self.v) {
     const got = text(await $.mcp.call(SERVER, 'get_session', { session_id: 'self' }))
     const who = await procs($, ['-Self'])
     if (!got || who.exitCode !== 0) return log($, 'self report failed')
-    self.v = { sessionId: (JSON.parse(got) as Session).sessionId, proc: JSON.parse(who.stdout) as Proc }
+    const { pid, created, app } = JSON.parse(who.stdout) as Proc & { app?: Proc | null }
+    self.v = { sessionId: (JSON.parse(got) as Session).sessionId, proc: { pid, created }, app: app ? key(app) : 'desk' }
   }
   const owned = ((await $.store.get('owned')) ?? {}) as Owned
   const have = owned[self.v.sessionId]
@@ -169,10 +183,12 @@ async function stopOrphans($: Engine, now: number, cfg: Cfg) {
 async function tick($: Engine, cfg: Cfg, self: { v?: Self }) {
   const now = await $.clock.now()
   try { await reportSelf($, self) } catch (err) { log($, `self report failed: ${String(err).slice(0, 200)}`) }
+  if (self.v && (await isAppLeader($, now, cfg, self.v.app))) {
+    const sessions = await listSessions($)
+    if (cfg.archiveMs) try { await archiveIdle($, now, cfg, sessions) } catch (err) { log($, `archive failed: ${String(err).slice(0, 200)}`) }
+    try { await releaseIdle($, now, cfg, sessions, self.v.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
+  }
   if (!(await isLeader($, now, cfg, !!self.v))) return
-  const sessions = await listSessions($)
-  if (cfg.archiveMs) try { await archiveIdle($, now, cfg, sessions) } catch (err) { log($, `archive failed: ${String(err).slice(0, 200)}`) }
-  try { await releaseIdle($, now, cfg, sessions, self.v?.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
   try { await stopOrphans($, now, cfg) } catch (err) { log($, `orphans failed: ${String(err).slice(0, 200)}`) }
 }
 

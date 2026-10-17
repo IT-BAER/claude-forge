@@ -1,6 +1,7 @@
 # Without arguments: prints every process as JSON {pid, ppid, name, created, cpu}.
 # created = creation time as UTC FILETIME, cpu = kernel+user time in 100 ns units.
-# -Self: prints {pid, created} of the nearest claude.exe above this script (the session's own process).
+# -Self: prints {pid, created, app} of the nearest claude.exe above this script (the session's own process);
+#   app = {pid, created} of its parent when that is an older claude.exe (the desktop app instance), else null.
 # -Kill "pid:created,...": stops each process only while its creation time still matches (no PID reuse hits).
 param([string]$Kill, [switch]$Self)
 $ErrorActionPreference = 'Stop'
@@ -10,7 +11,12 @@ if ($Self) {
   $p = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -Property $props
   for ($hops = 0; $p -and $hops -lt 64; $hops++) {
     if ($p.Name -ieq 'claude.exe') {
-      [Console]::Out.Write((ConvertTo-Json -InputObject ([ordered]@{ pid = [int]$p.ProcessId; created = [string]$p.CreationDate.ToFileTimeUtc() }) -Compress))
+      $a = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$p.ParentProcessId)" -Property $props
+      # Assigned in the branch: an if without a match yields AutomationNull, which ConvertTo-Json prints as {}.
+      $app = $null
+      if ($a -and $a.Name -ieq 'claude.exe' -and $a.CreationDate -le $p.CreationDate) {
+        $app = [ordered]@{ pid = [int]$a.ProcessId; created = [string]$a.CreationDate.ToFileTimeUtc() } }
+      [Console]::Out.Write((ConvertTo-Json -InputObject ([ordered]@{ pid = [int]$p.ProcessId; created = [string]$p.CreationDate.ToFileTimeUtc(); app = $app }) -Compress))
       return
     }
     $p = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$p.ParentProcessId)" -Property $props
