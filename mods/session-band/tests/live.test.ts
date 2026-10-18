@@ -356,10 +356,14 @@ test('each plan limit gets its own colour, weekly ones by today\'s share of the 
     { kind: 'weekly_fable', model: 'Fable', percentUsed: 12, resetsAt: day1 },
     { kind: 'weekly_sonnet', model: 'Sonnet', percentUsed: 30, resetsAt: at((4 * 24 + 1) * 60) },
   ]
+  let modes: any[] = []
   await start($, on, (on) => {
     on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: limits, cost: { usd: 1 } } }))
     on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
-    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+    on('ui.render', ($: any, e: any) => {
+      if (e.component === 'SessionMode') modes = e.props.modes
+      return $.ui.resolve(e).Box({ children: [] })
+    })
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
   const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
@@ -374,6 +378,11 @@ test('each plan limit gets its own colour, weekly ones by today\'s share of the 
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
   expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 6d10h\), budget today 14\.3% · /)
   await ui.unmount()
+  // the footer lists the coloured windows
+  const footer = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'SessionMode', props: { modes: [] } as any })
+  await footer.drawn()
+  await footer.unmount()
+  expect(modes).toEqual(['5h 85% · w 15% · fw 12%'])
 })
 
 test('per-model weekly windows (Fable) come from the usage endpoint into the band, hover and live file', async ($, on) => {

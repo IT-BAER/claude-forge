@@ -1145,7 +1145,7 @@ function footerLabel() {
   if (st.kind === 'kept') parts.push('cache kept warm')
   else if (st.kind === 'cooling' && big) parts.push(`cache cools in ${minutes(st.left)} · /keepwarm`)
   else if (st.kind === 'cold' && big) parts.push(`cache cold · rewrite ≈ ${money(rewriteCost(S.ctx, S.model, ttlMin()))}`)
-  const high = allLimits().filter((l) => (l.percentUsed || 0) >= 80)
+  const high = allLimits().filter((l) => limitColor(l, now))
   if (high.length) parts.push(limitsText(high))
   if (ready()) parts.push(`handoff ready · /${names.handoff} continue`)
   return parts.join(' · ')

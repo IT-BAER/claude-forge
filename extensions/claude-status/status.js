@@ -145,11 +145,16 @@ function cacheState(s, now) {
 
 // As in the band: a weekly window's budget up to the end of today is day n of 7 (counted
 // from its reset) times 1/7. Red at that budget, yellow at 80 % of it; other windows 95 / 80 %.
+function weekBudget(l, now) {
+  if ((l.kind !== 'seven_day' && !l.model) || !l.resetsAt) return null
+  const daysLeft = Math.min(6, Math.max(0, Math.floor((Date.parse(l.resetsAt) - now) / (24 * 60 * MIN))))
+  return ((7 - daysLeft) / 7) * 100
+}
+
 function limitColor(l, now) {
   const used = l.percentUsed || 0
-  const weekly = (l.kind === 'seven_day' || l.model) && l.resetsAt
-  const daysLeft = weekly ? Math.min(6, Math.max(0, Math.floor((Date.parse(l.resetsAt) - now) / (24 * 60 * MIN)))) : 0
-  const [red, yellow] = weekly ? [((7 - daysLeft) / 7) * 100, ((7 - daysLeft) / 7) * 80] : [95, 80]
+  const budget = weekBudget(l, now)
+  const [red, yellow] = budget === null ? [95, 80] : [budget, 0.8 * budget]
   return used >= red ? 'red' : used >= yellow ? 'yellow' : null
 }
 
@@ -198,7 +203,8 @@ function resetsText(limits, now) {
     const left = t - now
     const day = left >= DAY ? DAYS[new Date(t).getDay()] + ' ' : ''
     const span = left <= 0 ? 'due' : left >= DAY ? `in ${Math.floor(left / DAY)}d${Math.floor((left % DAY) / (60 * MIN))}h` : `in ${minutes(left)}`
-    return `${limitLabel(l)} resets ${day}${clock(t)} (${span})`
+    const budget = weekBudget(l, now)
+    return `${limitLabel(l)} resets ${day}${clock(t)} (${span})${budget === null ? '' : `, budget today ${+budget.toFixed(1)}%`}`
   }).join(' · ')
 }
 

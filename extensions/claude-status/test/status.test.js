@@ -69,6 +69,7 @@ test('weekly limits colour by today\'s share of the week, the worst window colou
   assert.equal(limits({ kind: 'seven_day', percentUsed: 84, resetsAt: at(600) }), 'yellow')
   // without a reset time a weekly window keeps the fixed 80/95
   assert.equal(limits({ kind: 'seven_day', percentUsed: 85 }), 'yellow')
+  assert.match(tooltip(hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: at(135) }, { kind: 'seven_day', percentUsed: 15, resetsAt: day1 }] }), NOW), /5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 6d10h\), budget today 14\.3%/)
 })
 
 test('kept warm and masked money', () => {
@@ -205,7 +206,7 @@ test('the tooltip says when each plan limit window resets', () => {
   const s = hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: at(135) }, { kind: 'seven_day', percentUsed: 24, resetsAt: at((3 * 24 + 21) * 60) }] })
   const lines = tooltip(s, NOW).split('  \n')
   assert.ok(lines.includes('plan limits used: 5h 40% · w 24%'))
-  assert.ok(lines.some((l) => /^5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/.test(l)), lines.join('\n'))
+  assert.ok(lines.some((l) => /^5h resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\), budget today 57\.1%$/.test(l)), lines.join('\n'))
   assert.ok(!tooltip(hb(), NOW).includes('resets'))
 })
 
@@ -216,6 +217,6 @@ test('a per-model weekly window (Fable) shows with its model name in the bar and
   assert.ok(render(s, NOW).text.endsWith('5h 40% · fw 33%'), render(s, NOW).text)
   const lines = tooltip(s, NOW).split('  \n')
   assert.ok(lines.includes('plan limits used: 5h 40% · fw 33%'))
-  assert.ok(lines.some((l) => / · fw resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/.test(l)), lines.join('\n'))
+  assert.ok(lines.some((l) => / · fw resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\), budget today 71\.4%$/.test(l)), lines.join('\n'))
   assert.deepEqual(accountLimits([s, hb({ rateLimits: [{ ...fable, percentUsed: 35 }] })], NOW).find((l) => l.kind === 'weekly_fable').percentUsed, 35)
 })
