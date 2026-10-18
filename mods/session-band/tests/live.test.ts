@@ -189,28 +189,35 @@ test('an answer that offers an out-of-date handoff again makes it ready again', 
 })
 
 for (const reason of ['answer', 'aborted'] as const) {
-  test(`a handoff file written mid-turn offers clear and continue only once the turn ends (${reason})`, async ($, on) => {
+  test(`a handoff file written mid-turn shows running, and offers clear and continue only once the turn ends (${reason})`, async ($, on) => {
     const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
     const { files, clock, live, toasts } = await start($, on, (on) => {
       on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+      on('prompt.submit', (_: any, e: any) => ({ text: e.text }))
       on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
       on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
       on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
       on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
     }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
     const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
-    const offered = async () => {
+    const buttons = async () => {
       const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
-      // handoff alone, or clear and continue beside it
-      const has = all(await ui.drawn()).filter((n) => n.type === 'Button').length === 2
+      const labels = all(await ui.drawn()).filter((n) => n.type === 'Button').map((n) => n.props.label)
       await ui.unmount()
-      return has
+      return labels
     }
+    // handoff alone, or clear and continue beside it
+    const offered = async () => (await buttons()).length === 2
     await $.turn.start({ turnId: 't1' } as any)
     await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
     await clock.advance(2000)
-    expect(await offered()).toBe(false)
-    expect(live().handoff).not.toBe('ready')
+    expect(await buttons()).toEqual(['handoff running'])
+    expect(live().handoff).toBe('running')
+    // a message sent while Claude still works does not drop the handoff
+    await $.prompt.submit({ text: 'and then the browser', origin: { kind: 'composer' } } as any)
+    await clock.advance(2000)
+    expect(await buttons()).toEqual(['handoff running'])
+    expect(live().handoff).toBe('running')
     expect(toasts.some((t) => /clear and continue/.test(t))).toBe(false)
     await $.turn.complete({ reason, answer: 'Handoff written.', durationMs: 1, isAborted: reason === 'aborted', turnId: 't1' } as any)
     expect(await offered()).toBe(true)

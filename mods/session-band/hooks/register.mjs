@@ -598,7 +598,8 @@ function handoffState() {
   if (H.continuing) return 'clearing'
   if (ready()) return 'ready'
   if (handoffPending) return 'queued'
-  if (H.armed) return 'running'
+  // a handoff file written mid-turn waits for the turn end
+  if (H.armed || (H.file && H.text && H.path === H.file)) return 'running'
   return 'idle'
 }
 
@@ -814,8 +815,9 @@ export function register(on) {
     if (S.label === basename(S.cwd) && e.origin && e.origin.kind === 'composer' && e.text) {
       S.label = basename(S.cwd) + ' · ' + clip(e.text, 40)
     }
-    // A new message in this chat makes a waiting handoff out of date (its file stays)
-    if (H.text && !H.continuing && e.origin && e.origin.kind === 'composer' && !String(e.text || '').trim().startsWith('/')) {
+    // A new message in this chat makes a waiting handoff out of date (its file stays);
+    // a message sent mid-turn does not, because the turn end takes the file again
+    if (H.text && !H.continuing && !S.working && e.origin && e.origin.kind === 'composer' && !String(e.text || '').trim().startsWith('/')) {
       H.text = ''
       H.path = ''
       H.fromFile = false
@@ -1080,8 +1082,9 @@ export function register(on) {
     // Right edge: one click runs /session-handoff (h while the band has the focus;
     // a letter never fires from the prompt box, unlike a digit). Once a handoff
     // is in, c clears this chat and sends it as the fresh chat's first prompt.
-    const busy = handoffPending || H.armed
-    const handoff = Button({ key: 'handoff', label: handoffPending ? 'handoff queued' : H.armed ? 'handoff running' : 'handoff', hotkey: 'h', plain: true, dimColor: busy, onPress: () => runHandoff($) })
+    const hs = handoffState()
+    const busy = hs === 'queued' || hs === 'running'
+    const handoff = Button({ key: 'handoff', label: busy ? 'handoff ' + hs : 'handoff', hotkey: 'h', plain: true, dimColor: busy, onPress: () => runHandoff($) })
     let right = handoff
     if (ready() || H.continuing) {
       const go = Button({ key: 'continue', label: H.continuing ? 'clearing' : 'clear and continue', hotkey: 'c', plain: true, onPress: () => clearAndContinue($) })
