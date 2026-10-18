@@ -61,20 +61,46 @@ async function isAppLeader($: Engine, now: number, cfg: Cfg, app: string) {
   return true
 }
 
+// A session without the app's session tools (VS Code, CLI) keeps its own activity record under
+// `cli:<its claude.exe>`, one store key per session so concurrent writers never overwrite each other.
+// hold: background tasks or scheduled wakeups that will wake the session later.
+type Activity = { at: number; busy: boolean; hold: boolean }
+type Me = { proc?: Proc; app?: string; sessionId?: string; act: Activity; saved?: string }
+const CLI = 'cli:'
+
+async function saveActivity($: Engine, me: Me) {
+  if (!me.proc || me.sessionId) return
+  const json = JSON.stringify(me.act)
+  if (json === me.saved) return
+  await $.store.set(CLI + key(me.proc), me.act)
+  me.saved = json
+}
+
+async function note($: Engine, me: Me, change: Partial<Activity>) {
+  me.act = { ...me.act, ...change, at: await $.clock.now() }
+  await saveActivity($, me).catch(err => log($, `activity save failed: ${String(err).slice(0, 200)}`))
+}
+
 // Each session publishes its own claude.exe once; the leader needs it to release the session later.
-type Self = { sessionId: string; proc: Proc; app: string }
-async function reportSelf($: Engine, self: { v?: Self }) {
-  if (!self.v) {
-    const got = text(await $.mcp.call(SERVER, 'get_session', { session_id: 'self' }))
+async function reportSelf($: Engine, me: Me) {
+  if (!me.proc) {
     const who = await procs($, ['-Self'])
-    if (!got || who.exitCode !== 0) return log($, 'self report failed')
+    if (who.exitCode !== 0) return log($, 'self report failed')
     const { pid, created, app } = JSON.parse(who.stdout) as Proc & { app?: Proc | null }
-    self.v = { sessionId: (JSON.parse(got) as Session).sessionId, proc: { pid, created }, app: app ? key(app) : 'desk' }
+    me.proc = { pid, created }
+    me.app = app ? key(app) : 'desk'
+  }
+  if (!me.sessionId) {
+    const got = text(await $.mcp.call(SERVER, 'get_session', { session_id: 'self' }))
+    if (!got) return saveActivity($, me)
+    me.sessionId = (JSON.parse(got) as Session).sessionId
+    // A desktop session whose app tools answered late may have written a record already.
+    if (me.saved) await $.store.delete(CLI + key(me.proc))
   }
   const owned = ((await $.store.get('owned')) ?? {}) as Owned
-  const have = owned[self.v.sessionId]
-  if (have && have.pid === self.v.proc.pid && have.created === self.v.proc.created) return
-  owned[self.v.sessionId] = self.v.proc
+  const have = owned[me.sessionId]
+  if (have && have.pid === me.proc.pid && have.created === me.proc.created) return
+  owned[me.sessionId] = me.proc
   await $.store.set('owned', owned)
 }
 
@@ -145,9 +171,28 @@ async function releaseIdle($: Engine, now: number, cfg: Cfg, sessions: Session[]
   log($, `released ${kill.map(r => `${r.name}(${r.pid})`).join(' ')}: ${res.stdout.slice(0, 300)}`)
 }
 
-async function stopOrphans($: Engine, now: number, cfg: Cfg) {
-  const snap = await snapshot($)
-  if (!snap) return
+// Stops the whole tree of each VS Code or CLI session idle past the limit, its claude.exe included:
+// those hosts have no sidebar that keeps the session, so the conversation continues only by resuming it.
+async function releaseCli($: Engine, now: number, cfg: Cfg, snap: Snap, mine: Proc | undefined) {
+  const live = new Map(snap.rows.map(r => [key(r), r]))
+  const kill: Row[] = []
+  for (const k of (await $.store.keys()).filter(k => k.startsWith(CLI))) {
+    const id = k.slice(CLI.length)
+    const root = live.get(id)
+    if (!root || root.name.toLowerCase() !== 'claude.exe') { await $.store.delete(k); continue }
+    const a = (await $.store.get(k)) as Activity | undefined
+    if (!a || a.busy || a.hold || (mine && id === key(mine)) || now - a.at < cfg.idleMs) continue
+    const members = snap.tree(root).filter(r => !SPARED_IN_SESSION.has(r.name.toLowerCase()))
+    kill.push(...members)
+    await $.store.delete(k)
+    log($, `release cli ${id}: ${members.length} processes, idle ${Math.round((now - a.at) / MIN)} min`)
+  }
+  if (!kill.length) return
+  const res = await procs($, ['-Kill', kill.map(key).join(',')])
+  log($, `released ${kill.map(r => `${r.name}(${r.pid})`).join(' ')}: ${res.stdout.slice(0, 300)}`)
+}
+
+async function stopOrphans($: Engine, now: number, cfg: Cfg, snap: Snap) {
   const { rows, parent, tree } = snap
   const underClaude = (r: Row) => {
     for (let p = parent(r), hops = 0; p && hops < 64; p = parent(p), hops++) if (p.name.toLowerCase() === 'claude.exe') return true
@@ -180,16 +225,19 @@ async function stopOrphans($: Engine, now: number, cfg: Cfg) {
   log($, `stopped ${kill.map(r => `${r.name}(${r.pid})`).join(' ')}: ${res.stdout.slice(0, 300)}`)
 }
 
-async function tick($: Engine, cfg: Cfg, self: { v?: Self }) {
+async function tick($: Engine, cfg: Cfg, me: Me) {
   const now = await $.clock.now()
-  try { await reportSelf($, self) } catch (err) { log($, `self report failed: ${String(err).slice(0, 200)}`) }
-  if (self.v && (await isAppLeader($, now, cfg, self.v.app))) {
+  try { await reportSelf($, me) } catch (err) { log($, `self report failed: ${String(err).slice(0, 200)}`) }
+  if (me.sessionId && me.app && (await isAppLeader($, now, cfg, me.app))) {
     const sessions = await listSessions($)
     if (cfg.archiveMs) try { await archiveIdle($, now, cfg, sessions) } catch (err) { log($, `archive failed: ${String(err).slice(0, 200)}`) }
-    try { await releaseIdle($, now, cfg, sessions, self.v.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
+    try { await releaseIdle($, now, cfg, sessions, me.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
   }
-  if (!(await isLeader($, now, cfg, !!self.v))) return
-  try { await stopOrphans($, now, cfg) } catch (err) { log($, `orphans failed: ${String(err).slice(0, 200)}`) }
+  if (!(await isLeader($, now, cfg, !!me.sessionId))) return
+  const snap = await snapshot($)
+  if (!snap) return
+  try { await releaseCli($, now, cfg, snap, me.proc) } catch (err) { log($, `cli release failed: ${String(err).slice(0, 200)}`) }
+  try { await stopOrphans($, now, cfg, snap) } catch (err) { log($, `orphans failed: ${String(err).slice(0, 200)}`) }
 }
 
 export const register: Register = (on, options) => {
@@ -200,12 +248,27 @@ export const register: Register = (on, options) => {
   const cpuIdle = num(options.cpuIdleMs, 1000) * 10_000
   const intervalMs = num(options.intervalMinutes, 5) * MIN
   const cfg: Cfg = { idleMs, archiveMs, orphanMs, cpuIdle, intervalMs }
-  const self: { v?: Self } = {}
+  const me: Me = { act: { at: 0, busy: false, hold: false } }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    void reportSelf($, self).catch(err => log($, `self report failed: ${String(err).slice(0, 200)}`))
-    $.clock.every(intervalMs, () => void tick($, cfg, self))
+    me.act.at = await $.clock.now()
+    void reportSelf($, me).catch(err => log($, `self report failed: ${String(err).slice(0, 200)}`))
+    $.clock.every(intervalMs, () => void tick($, cfg, me))
     return started
+  })
+  // Main loop only: a subagent's run happens inside a main turn or is a background task Stop reports.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) await note($, me, { busy: true })
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined) await note($, me, { busy: false })
+    return done
+  })
+  on('classic.Stop', async ($, e, next) => {
+    await note($, me, { hold: !!(e.background_tasks?.length || e.session_crons?.length) })
+    return next(e)
   })
 }
