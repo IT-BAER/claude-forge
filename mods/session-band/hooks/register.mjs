@@ -350,7 +350,24 @@ function limitsText(limits, sep = ' · ') {
   return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed)}%`).join(sep)
 }
 
-// Each window's name and reset: "5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h)"
+// A weekly window's budget up to the end of today: day n of 7, counted from its reset, allows n/7 of it.
+// null for the 5-hour and spend windows, and for a weekly window without a reset time.
+const DAY = 24 * 60 * MIN
+function weekBudget(l, at) {
+  if ((l.kind !== 'seven_day' && !l.model) || !l.resetsAt) return null
+  const daysLeft = Math.min(6, Math.max(0, Math.floor((Date.parse(l.resetsAt) - at) / DAY)))
+  return ((7 - daysLeft) / 7) * 100
+}
+
+// Red at today's budget, yellow at 80 % of it; without a budget red at 95 %, yellow at 80 %
+function limitColor(l, at) {
+  const used = l.percentUsed || 0
+  const budget = weekBudget(l, at)
+  const [red, yellow] = budget === null ? [95, 80] : [budget, 0.8 * budget]
+  return used >= red ? 'red' : used >= yellow ? 'yellow' : null
+}
+
+// Each window's name and reset: "5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h), budget today 57.1%"
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 function resetsText(limits, at) {
   return limits.map((l) => {
@@ -358,9 +375,10 @@ function resetsText(limits, at) {
     if (!l.resetsAt) return name
     const t = Date.parse(l.resetsAt)
     const left = t - at
-    const day = left >= 24 * 60 * MIN ? DAYS[new Date(t).getDay()] + ' ' : ''
-    const span = left <= 0 ? 'due' : left >= 24 * 60 * MIN ? `in ${Math.floor(left / (24 * 60 * MIN))}d${Math.floor((left % (24 * 60 * MIN)) / (60 * MIN))}h` : `in ${minutes(left)}`
-    return `${name} resets ${day}${clock(t)} (${span})`
+    const day = left >= DAY ? DAYS[new Date(t).getDay()] + ' ' : ''
+    const span = left <= 0 ? 'due' : left >= DAY ? `in ${Math.floor(left / DAY)}d${Math.floor((left % DAY) / (60 * MIN))}h` : `in ${minutes(left)}`
+    const budget = weekBudget(l, at)
+    return `${name} resets ${day}${clock(t)} (${span})${budget === null ? '' : `, budget today ${+budget.toFixed(1)}%`}`
   }).join(' · ')
 }
 
@@ -398,10 +416,9 @@ async function refreshModelLimits($) {
   }
 }
 
-function limitTone(limits, extra) {
-  const top = Math.max(...limits.map((l) => l.percentUsed || 0))
-  if (top >= 95) return { ...extra, color: 'red', bold: true }
-  if (top >= 80) return { ...extra, color: 'yellow' }
+function limitTone(color, extra) {
+  if (color === 'red') return { ...extra, color: 'red', bold: true }
+  if (color === 'yellow') return { ...extra, color: 'yellow' }
   return { ...extra, dimColor: true }
 }
 
@@ -1070,7 +1087,7 @@ export function register(on) {
     const coldUsd = money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))
     if (cold) parts.push(Text({ dimColor: true, hover: tip('ck-cr'), children: [` │ cr ${cold} ${coldUsd}`] }))
     const limits = allLimits()
-    if (limits.length) parts.push(Text(limitTone(limits, { hover: tip('ck-limits'), children: [' │ ' + limitsText(limits, ' ')] })))
+    limits.forEach((l, i) => parts.push(Text(limitTone(limitColor(l, now), { hover: tip('ck-limits'), children: [`${i ? ' ' : ' │ '}${limitLabel(l)} ${Math.round(l.percentUsed)}%`] }))))
     // Whole segments wrap to a second row; a squeezed segment would split its label from its value
     const row = [Box({ flexDirection: 'row', flexWrap: 'wrap', children: parts })]
     if (st.kind === 'cooling' && big) {

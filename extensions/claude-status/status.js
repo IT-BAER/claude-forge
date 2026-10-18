@@ -143,6 +143,16 @@ function cacheState(s, now) {
   return { kind: 'warm', left }
 }
 
+// As in the band: a weekly window's budget up to the end of today is day n of 7 (counted
+// from its reset) times 1/7. Red at that budget, yellow at 80 % of it; other windows 95 / 80 %.
+function limitColor(l, now) {
+  const used = l.percentUsed || 0
+  const weekly = (l.kind === 'seven_day' || l.model) && l.resetsAt
+  const daysLeft = weekly ? Math.min(6, Math.max(0, Math.floor((Date.parse(l.resetsAt) - now) / (24 * 60 * MIN)))) : 0
+  const [red, yellow] = weekly ? [((7 - daysLeft) / 7) * 100, ((7 - daysLeft) / 7) * 80] : [95, 80]
+  return used >= red ? 'red' : used >= yellow ? 'yellow' : null
+}
+
 function limitsText(limits) {
   return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed || 0)}%`).join(' · ')
 }
@@ -167,8 +177,8 @@ function render(s, now) {
   ]
   const limits = s.rateLimits || []
   if (limits.length) {
-    const top = Math.max(0, ...limits.map((l) => l.percentUsed || 0))
-    segments.push({ key: 'limits', text: limitsText(limits), color: top >= 95 ? 'red' : top >= 80 ? 'yellow' : null })
+    const tones = limits.map((l) => limitColor(l, now))
+    segments.push({ key: 'limits', text: limitsText(limits), color: tones.includes('red') ? 'red' : tones.includes('yellow') ? 'yellow' : null })
   }
   return { text: segments.map((g) => g.text).join(' · '), segments, state: st }
 }

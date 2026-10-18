@@ -55,6 +55,22 @@ test('plan limits at 80 % turn only the limits yellow, at 95 % red', () => {
   assert.equal(colors(render(hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 96 }] }), NOW)).limits, 'red')
 })
 
+test('weekly limits colour by today\'s share of the week, the worst window colours the limits', () => {
+  const at = (min) => new Date(NOW + min * MIN).toISOString()
+  const day1 = at((6 * 24 + 10) * 60) // 6 full days left: budget 1/7 = 14.3 %
+  const day3 = at((4 * 24 + 1) * 60) // budget 3/7 = 42.9 %
+  const limits = (...l) => colors(render(hb({ rateLimits: [{ kind: 'five_hour', percentUsed: 40 }, ...l] }), NOW)).limits
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 14.3, resetsAt: day1 }), 'red')
+  assert.equal(limits({ kind: 'weekly_fable', model: 'Fable', percentUsed: 12, resetsAt: day1 }), 'yellow')
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 11, resetsAt: day1 }), null)
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 30, resetsAt: day3 }), null)
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 30, resetsAt: day3 }, { kind: 'weekly_fable', model: 'Fable', percentUsed: 50, resetsAt: day3 }), 'red')
+  // the last day's budget is the whole week
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 84, resetsAt: at(600) }), 'yellow')
+  // without a reset time a weekly window keeps the fixed 80/95
+  assert.equal(limits({ kind: 'seven_day', percentUsed: 85 }), 'yellow')
+})
+
 test('kept warm and masked money', () => {
   const r = render(hb({ keepWarm: true, masked: true }), NOW)
   assert.match(r.text, /^◆ kept warm/)

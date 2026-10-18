@@ -19,7 +19,7 @@ The [session-band](../../mods/session-band) band for VS Code. Claude Code mods c
 | `ctx` | Tokens in context. |
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. Red together with a cold big cache. |
 | `sc` | Session cost so far, at API list prices. |
-| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. |
+| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow a daily budget (day n of 7 since the reset allows n/7 of the week): red once today's budget is used, yellow at 80 % of it. The item takes the colour of the worst window. |
 
 Only the part that needs attention takes a colour, as in the band. The section sits at the right end of the status bar, right of every other item, between two dim bars. That keeps it under the chat in the secondary sidebar, and opening a file does not move it.
 

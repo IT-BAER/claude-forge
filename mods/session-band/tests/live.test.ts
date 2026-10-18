@@ -338,11 +338,42 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
     const drawn = all(await ui.drawn())
-    expect(drawn.find((n) => n.type === 'Text' && /5h 48% w 24%/.test(String(n.children)))?.hover?.scope).toBe('ck-limits')
+    expect(drawn.find((n) => n.type === 'Text' && n.children.join('') === ' │ 5h 48%')?.hover?.scope).toBe('ck-limits')
+    expect(drawn.find((n) => n.type === 'Text' && n.children.join('') === ' w 24%')?.hover?.scope).toBe('ck-limits')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h \(5-hour window\) resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\)$/)
+    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h \(5-hour window\) resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\), budget today 57\.1%$/)
     await ui.unmount()
   }
+})
+
+test('each plan limit gets its own colour, weekly ones by today\'s share of the week', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  const at = (min: number) => new Date(NOW + min * 60000).toISOString()
+  const day1 = at((6 * 24 + 10) * 60) // 6 full days left: budget 1/7 = 14.3 %
+  const limits = [
+    { kind: 'five_hour', percentUsed: 85, resetsAt: at(135) },
+    { kind: 'seven_day', percentUsed: 15, resetsAt: day1 },
+    { kind: 'weekly_fable', model: 'Fable', percentUsed: 12, resetsAt: day1 },
+    { kind: 'weekly_sonnet', model: 'Sonnet', percentUsed: 30, resetsAt: at((4 * 24 + 1) * 60) },
+  ]
+  await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: limits, cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
+  const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+  const drawn = all(await ui.drawn())
+  const text = (t: string) => drawn.find((n) => n.type === 'Text' && n.children.join('') === t)
+  const style = (t: string) => { const n = text(t); return n && { ...n, ...n.props } }
+  expect(style(' │ 5h 85%')).toMatchObject({ color: 'yellow' })
+  expect(style(' w 15%')).toMatchObject({ color: 'red', bold: true })
+  expect(style(' fw 12%')).toMatchObject({ color: 'yellow' })
+  expect(style(' sw 30%')).toMatchObject({ dimColor: true })
+  expect(text(' w 15%')?.hover?.scope).toBe('ck-limits')
+  const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
+  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 6d10h\), budget today 14\.3% · /)
+  await ui.unmount()
 })
 
 test('per-model weekly windows (Fable) come from the usage endpoint into the band, hover and live file', async ($, on) => {
@@ -376,9 +407,9 @@ test('per-model weekly windows (Fable) come from the usage endpoint into the ban
   const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const drawn = all(await ui.drawn())
-  expect(drawn.some((n) => n.type === 'Text' && /5h 48% fw 33%/.test(String(n.children)))).toBe(true)
+  expect(drawn.some((n) => n.type === 'Text' && n.children.join('') === ' fw 33%')).toBe(true)
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw \(weekly, Fable only\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\)$/)
+  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw \(weekly, Fable only\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\), budget today 71\.4%$/)
   await ui.unmount()
   // within five minutes the endpoint is not asked again
   await $.turn.start({ turnId: 't1' } as any)
@@ -435,7 +466,8 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
     expect(kept?.hover?.scope).toBe('ck-c')
     expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache: kept warm until \d{1,2}:\d\d[ap]m, 0 pings so far \(\$0\)/)
     expect(texts.some((n) => /^ │ rwc \$\d+\.\d\d$/.test(n.children.join('')))).toBe(true)
-    expect(texts.some((n) => n.children.join('') === ' │ 5h 9% w 10%')).toBe(true)
+    expect(texts.some((n) => n.children.join('') === ' │ 5h 9%')).toBe(true)
+    expect(texts.some((n) => n.children.join('') === ' w 10%')).toBe(true)
     expect(texts.find((n) => n.children.join('') === ' │ ctx 90.0k')?.hover?.scope).toBe('ck-ctx')
     expect(helpText(drawn, 'ck-ctx')).toBe("ctx = context: 90.0k tokens in this session's context window of 200k")
     expect(helpText(drawn, 'ck-rewrite')).toMatch(/^rwc = rewrite cost: /)

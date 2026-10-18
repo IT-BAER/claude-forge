@@ -38,9 +38,9 @@ Start a new session afterwards.
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. |
 | `sc` | Session cost so far, at API list prices. |
 | `cr` | Cold restarts: how many sends rewrote an expired cache this session, and what they cost. Shown only after the first one. |
-| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used. Yellow at 80 %, red at 95 %. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
+| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used, each in its own colour. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow a daily budget: day n of 7 (counted from the reset) allows n/7 of the week, so day 1 allows 14.3 %. Red once today's budget is used, yellow at 80 % of it. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
-Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band. Each starts with what the label stands for (`rwc = rewrite cost: ...`), and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for what each window is and when it resets: `5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h)`. On a subscription the prices show up as usage against your limits, not as a bill.
+Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band. Each starts with what the label stands for (`rwc = rewrite cost: ...`), and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for what each window is and when it resets: `5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h), budget today 57.1%`. On a subscription the prices show up as usage against your limits, not as a bill.
 
 ## Commands
 
