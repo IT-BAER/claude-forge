@@ -581,11 +581,13 @@ test('the A button is highlighted while on and explains itself on hover', async 
     const button = drawn.find((n) => n.type === 'Button' && n.props.key === 'auto')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-auto' && n.hover?.display === 'flex')
     await ui.unmount()
-    return { button, help: all(help).find((n) => n.type === 'Text')?.children.join('') }
+    return { button, keys: drawn.filter((n) => n.type === 'Button').map((n) => n.props.key), help: all(help).find((n) => n.type === 'Text')?.children.join('') }
   }
   for (const surface of ['terminal', 'desktop'] as const) {
     const off = await look(surface)
     expect(off.button.props.label).toBe('A')
+    // the last Button on the band row: the right end
+    expect(off.keys.at(-1)).toBe('auto')
     expect(off.button.hover?.scope).toBe('ck-auto')
     expect(off.button.props.plain).toBeUndefined()
     expect(off.button.props.variant).toBe('secondary')
