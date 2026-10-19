@@ -99,6 +99,11 @@ const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recomme
 const AUTO_LOOP = 3
 const AUTO_LOOP_MS = 15 * 60000
 let autoRuns = [] // when A cleared and continued, newest last
+// Background shells: a turn that waits for one does not end the loop. An id goes when a turn starts
+// with its notification, or after AUTO_BG_MS (a notification read inside a busy turn goes unseen).
+const AUTO_BG_MS = 2 * 3600000
+const BG_STARTED = /(?:running in background with ID: |moved to the background \(ID: )(\w+)/
+const bgShells = new Map() // task id -> started at
 
 async function setAuto($, on, why) {
   auto = on
@@ -106,6 +111,11 @@ async function setAuto($, on, why) {
   if (why) $.ui.toast(why, { timeoutMs: 10000 })
   $.ui.invalidate('ui.render')
   await heartbeat($, true)
+}
+
+function waitsForWork() {
+  for (const [id, at] of bgShells) if (now - at >= AUTO_BG_MS) bgShells.delete(id)
+  return S.agentsRunning > 0 || bgShells.size > 0
 }
 
 async function autoStep($) {
@@ -904,6 +914,7 @@ export function register(on) {
     now = await $.clock.now()
     S.working = true
     if (e.turnId) S.turnId = e.turnId
+    if (!e.agentId) for (const m of String(e.text || '').matchAll(/<task-id>(\w+)<\/task-id>/g)) bgShells.delete(m[1])
     await heartbeat($, true)
     return next(e)
   })
@@ -969,10 +980,10 @@ export function register(on) {
       H.askAfter = false
     } else if (H.armed && e.turnId !== H.notTurn) await captureHandoff($, e)
     else if (!H.text && !H.resuming && e.reason === 'answer' && offeredHandoff(e.answer)) await captureHandoffFile($, offeredHandoff(e.answer))
-    // No handoff from this turn: Claude found nothing left to do (or the turn broke off)
-    if (auto && !H.text && !H.armed && !handoffPending) await setAuto($, false, 'Autonomous mode off: the turn ended without a handoff.')
-    refreshModelLimits($).catch(() => {})
     await heartbeat($, true)
+    // No handoff from this turn and no background work to wait for: nothing left to do (or the turn broke off)
+    if (auto && !H.text && !H.armed && !handoffPending && !waitsForWork()) await setAuto($, false, 'Autonomous mode off: the turn ended without a handoff.')
+    refreshModelLimits($).catch(() => {})
     $.ui.invalidate('ui.render')
     return r
   })
@@ -1020,6 +1031,8 @@ export function register(on) {
     }
     try {
       const r = await next(e)
+      const bg = !e.agentId && r && ((r.result && r.result.backgroundTaskId) || (BG_STARTED.exec(String(r.text || '')) || [])[1])
+      if (bg) bgShells.set(bg, await $.clock.now())
       // a denied or failed write left the file as it was
       if (!e.agentId && r && !r.deny && !r.isError && noteHandoffFile(e)) await captureHandoffFile($, H.file, true)
       return r

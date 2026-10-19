@@ -84,9 +84,11 @@ The band does not tell Claude to write handoffs. A new handoff comes from you (`
 
 | Event | Toast |
 | --- | --- |
-| A turn ends without a handoff. Claude found nothing left to do, or the turn broke off. | `Autonomous mode off: the turn ended without a handoff.` |
+| A turn ends without a handoff and with no background work left. Claude found nothing left to do, or the turn broke off. | `Autonomous mode off: the turn ended without a handoff.` |
 | `/clear` failed. The band stops instead of retrying. | `Autonomous mode off: clear and continue failed.` |
 | A third handoff is ready within 15 minutes, for example a chain of "check again later" handoffs. The band does not continue it; it waits for `c`. | `Autonomous mode off: 3 handoffs in 15 minutes, possible loop. The handoff waits for c.` |
+
+Background work keeps A on when a turn ends without a handoff: a running subagent, or a background shell (started with `run_in_background`, or moved to the background by the Bash timeout). Claude Code wakes Claude when the task finishes, and that turn decides. The band forgets a shell when a turn starts with its task notification, or 2 hours after it started, because a notification Claude reads inside a busy turn is not visible to the band. Classic `Stop` hooks list background tasks too, but they do not reach a plugin you install where an organization manages Claude Code, so the band does not use them.
 
 ### Before you leave a chat on A
 

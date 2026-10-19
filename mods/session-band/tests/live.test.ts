@@ -493,13 +493,14 @@ const COMPOSE = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surf
 async function startAuto($: any, on: any) {
   const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
   const submitted: string[] = []
+  const shell = { value: { result: {}, text: '' } as any }
   const ctx = await start($, on, (on) => {
     on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
     on('prompt.submit', (_: any, e: any) => { submitted.push(e.text); return { text: e.text } })
     on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' }] }))
     on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
     on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
-    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); if (e.tool === 'Bash') return shell.value; return { result: { text: '' } } })
     on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
   const files = ctx.files
@@ -519,8 +520,16 @@ async function startAuto($: any, on: any) {
     if (write) await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
     await $.turn.complete({ reason: 'answer', answer: write ? 'Handoff written.' : 'All done.', durationMs: 1, isAborted: false, turnId: id } as any)
   }
-  return { ...ctx, submitted, band, toggle, handoffTurn, all }
+  // A turn as Claude Code runs it: started by text (a task notification), with tool calls in between
+  const turn = async (id: string, text: string, calls: any[] = []) => {
+    await $.turn.start({ turnId: id, text } as any)
+    for (const c of calls) await $.tool.call(c)
+    await $.turn.complete({ reason: 'answer', answer: 'Waiting for the package suite.', durationMs: 1, isAborted: false, turnId: id } as any)
+  }
+  return { ...ctx, submitted, shell, band, toggle, handoffTurn, turn, all }
 }
+
+const notification = (id: string) => `<task-notification>\n<task-id>${id}</task-id>\n<status>completed</status>\n</task-notification>`
 
 for (const on_ of [true, false]) {
   test(`with A ${on_ ? 'on' : 'off'}, a ready handoff ${on_ ? 'is cleared and continued once the session is idle' : 'waits for c'}`, async ($, on) => {
@@ -546,6 +555,44 @@ test('with A on, a turn that ends without a handoff turns A off and clears nothi
   expect(ran).not.toContain('clear')
   expect(live().auto).toBe(false)
   expect(toasts.some((t) => /^Autonomous mode off/.test(t))).toBe(true)
+})
+
+test('with A on, a turn that ends while a background shell runs keeps A on, and its wake-up turn continues the handoff', async ($, on) => {
+  const { ran, clock, shell, toggle, turn, live } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: { stdout: '', backgroundTaskId: 'b1' }, text: 'Command running in background with ID: b1.' }
+  await turn('t1', 'run the package tests', [{ tool: 'Bash', command: 'npx vitest run', run_in_background: true }])
+  await clock.advance(6000)
+  expect(live().auto).toBe(true)
+  expect(ran).not.toContain('clear')
+  await turn('t2', notification('b1'), [{ tool: 'Write', file_path: HF, content: '...' }])
+  await clock.advance(6000)
+  expect(ran).toContain('clear')
+})
+
+test('with A on, a shell its timeout moved to the background holds A until its notification turn ends without a handoff', async ($, on) => {
+  const { clock, shell, toggle, turn, live, toasts } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: { stdout: '' }, text: 'Command did not complete within its 600s timeout and was moved to the background (ID: bix3oryl0). Output is being written to: x.output.' }
+  await turn('t1', 'run the package tests', [{ tool: 'Bash', command: 'npx vitest run' }])
+  await clock.advance(6000)
+  expect(live().auto).toBe(true)
+  await turn('t2', notification('bix3oryl0'))
+  expect(live().auto).toBe(false)
+  expect(toasts.some((t) => /^Autonomous mode off: the turn ended without a handoff/.test(t))).toBe(true)
+})
+
+test('with A on, a background shell whose notification never came stops holding A after 2 hours', async ($, on) => {
+  const { clock, shell, toggle, turn, live } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: { stdout: '', backgroundTaskId: 'b9' }, text: 'Command running in background with ID: b9.' }
+  await turn('t1', 'start the dev server', [{ tool: 'Bash', command: 'npm run dev', run_in_background: true }])
+  await clock.advance(119 * 60000)
+  await turn('t2', 'status?')
+  expect(live().auto).toBe(true)
+  await clock.advance(2 * 60000)
+  await turn('t3', 'status?')
+  expect(live().auto).toBe(false)
 })
 
 test('with A on, the third handoff within 15 minutes turns A off instead of continuing', async ($, on) => {
