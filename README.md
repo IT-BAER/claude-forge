@@ -9,7 +9,7 @@ A mod adds a pane, a band or a command to Claude Code itself.
 | Mod | What it does |
 | --- | --- |
 | [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
-| [`session-band`](mods/session-band) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board` and `/handoff`. Fork of Cache Keeper by Nate Herk. |
+| [`session-band`](mods/session-band) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board`, `/handoff` and an autonomous mode that clears and continues each handoff without you (needs the `session-handoff` skill). Fork of Cache Keeper by Nate Herk. |
 | [`session-reaper`](mods/session-reaper) | Archives desktop sessions idle for more than 60 minutes and stops idle process trees (MCP servers, dev servers) left behind by ended sessions, which otherwise fill RAM until other apps run out of memory. Windows and the desktop Code tab only; needs one permission rule in auto mode. |
 
 ## VS Code extensions
@@ -24,7 +24,7 @@ A skill teaches Claude a repeatable task. Install a skill by copying its folder 
 
 | Skill | What it does |
 | --- | --- |
-| [`session-handoff`](skills/session-handoff) | Writes the session state to `.claude/session-handoff.md` (12 fixed sections) so a fresh chat can continue, and consumes it in the next chat. The `session-band` handoff button uses it when installed. |
+| [`session-handoff`](skills/session-handoff) | Writes the session state to `~/.claude/handoffs/<repo>/` (12 fixed sections) so a fresh chat can continue, also on another machine, and consumes it in the next chat. The `session-band` handoff button uses it when installed; its autonomous mode needs it. Windows. |
 
 ## Install
 

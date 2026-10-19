@@ -17,6 +17,7 @@ Every request re-reads the whole chat. From the prompt cache that costs a tenth 
 - Claude Code 2.1.287 or later, in the terminal or the Desktop app's Code tab. The VS Code chat does not draw the band; the [claude-status](../../extensions/claude-status) extension shows the same values in the VS Code status bar.
 - Mods turned on for your account. `claude plugin test` in any folder answers "no hooks module to load" when mods can load.
 - Do not install it next to Cache Keeper. Both register the same commands.
+- For [autonomous mode](#autonomous-mode-a): the [session-handoff](../../skills/session-handoff) skill from this repository, installed in `~/.claude/skills/session-handoff`. The marketplace does not install skills, so copy it by hand (see its README).
 
 ## Install
 
@@ -48,9 +49,48 @@ Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band.
 - Cold-send guard: a message into a chat over 150k tokens after its cache expired asks first: Send anyway, Compact first, or Cancel.
 - `/board` shows every local chat in one pane: waiting on you first, then working, then the ones whose cache cools soonest.
 - `/handoff` (or the `handoff` button) runs the bundled `session-handoff` skill, then clears the chat and starts the fresh one from the handoff.
-- The `A` button at the right edge toggles autonomous mode for this chat. While it is lit, each ready handoff is cleared and continued by itself: the chat must be idle for 3 seconds, with nothing waiting on you and no background agents running. Claude is told that nobody is at the keyboard, and each `AskUserQuestion` goes back to Claude to pick its own recommendation. A turn that ends without a handoff turns A off. Permission prompts still follow the permission mode, so run the chat in auto mode for an unattended loop. A lasts until the process ends. Turning it on or off changes the system prompt, so the next send rewrites the cache once.
+- The `A` button at the right end of the band toggles [autonomous mode](#autonomous-mode-a): handoffs are cleared and continued without you.
 - `/cache` shows status and settings: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`.
 - Alerts are off by default. They are the unasked toasts: a big cache about to go cold, and another chat waiting on you. `/cache alerts` toggles them.
+
+## Autonomous mode (A)
+
+Autonomous mode lets one chat work through a long task in several fresh contexts while you are away. Each time Claude ends a turn with a handoff, the band clears the chat and starts the next one from that handoff, without a click from you.
+
+It needs the [session-handoff](../../skills/session-handoff) skill. That skill writes the handoff to a file under `~/.claude/handoffs/`, so the work state survives the clear and the fresh chat gets a one-line resume prompt. Its consume step marks the file `status: consumed`, so the band never continues the same handoff twice.
+
+### Turn it on
+
+Press `A` at the right end of the band. A toast confirms it. While A is on, the button is drawn as the primary button and the footer shows `autonomous`. Press `A` again to turn it off.
+
+A lasts for the current Claude Code process only. It is not saved, so a restart or a new window starts with A off.
+
+### What changes while A is on
+
+- Claude gets one more system prompt section: nobody is at the keyboard, do not ask or wait for "proceed" or "go", decide with your own recommendation and continue. Turning A on or off changes the system prompt, so the next send rewrites the cache once.
+- Every `AskUserQuestion` is refused. The refusal tells Claude to pick its recommended option and continue.
+- After a handoff turn, the band does not ask "Clear and continue?". It does that by itself.
+
+### The loop
+
+1. Claude ends a turn and a handoff is ready. That is a handoff file written in this turn (by the session-handoff skill, or any file the band detects as a handoff), or the answer of a `/handoff` turn.
+2. The band waits until the chat is idle: 3 seconds after the turn end, no permission prompt or question waiting on you, no background agents running, no handoff still queued.
+3. The band runs `/clear` and sends the resume line as your message: `Continue from session handoff: read <file>, consume it with session-handoff, do not re-explore.`
+4. The fresh chat consumes the handoff and works. If it ends with a new handoff, the loop goes to step 1.
+
+The band does not tell Claude to write handoffs. A new handoff comes from you (`/handoff`, the `h` button), from a hook of your own (for example at a context size), or from the handoff itself, when its remaining steps say to hand off again.
+
+### When A turns itself off
+
+| Event | Toast |
+| --- | --- |
+| A turn ends without a handoff. Claude found nothing left to do, or the turn broke off. | `Autonomous mode off: the turn ended without a handoff.` |
+| `/clear` failed. The band stops instead of retrying. | `Autonomous mode off: clear and continue failed.` |
+
+### Before you leave a chat on A
+
+- Run the chat in auto mode, or with the permission rules it needs. Permission prompts still follow the permission mode, and the loop waits while one is open.
+- The A prompt tells Claude not to wait for approval. Where your `CLAUDE.md` asks for a confirmation first (push, delete, deploy), Claude now decides by itself. To block an action for sure, use a deny rule in the permission settings, not an instruction.
 
 ## Changes from Cache Keeper
 

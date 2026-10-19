@@ -13,7 +13,7 @@
     {
       "name": "session-band",
       "source": "./mods/session-band",
-      "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board and /handoff. Fork of Cache Keeper by Nate Herk."
+      "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board, /handoff and an autonomous mode. Fork of Cache Keeper by Nate Herk."
     },
     {
       "name": "session-reaper",
