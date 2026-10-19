@@ -575,25 +575,29 @@ test('with A on, the system prompt says nobody is at the keyboard and questions 
 })
 
 test('the A button is highlighted while on and explains itself on hover', async ($, on) => {
-  const { band, toggle, all } = await startAuto($, on)
+  const { band, toggle, all, toasts } = await startAuto($, on)
   const look = async (surface: 'terminal' | 'desktop') => {
     const { ui, drawn } = await band(surface)
     const button = drawn.find((n) => n.type === 'Button' && n.props.key === 'auto')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-auto' && n.hover?.display === 'flex')
     await ui.unmount()
-    return { button, label: all(button).filter((n) => n.type === 'Text'), help: all(help).find((n) => n.type === 'Text')?.children.join('') }
+    return { button, help: all(help).find((n) => n.type === 'Text')?.children.join('') }
   }
   for (const surface of ['terminal', 'desktop'] as const) {
     const off = await look(surface)
     expect(off.button.props.label).toBe('A')
     expect(off.button.hover?.scope).toBe('ck-auto')
-    expect(off.label.some((n) => n.props?.inverse || n.inverse)).toBe(false)
+    expect(off.button.props.plain).toBeUndefined()
+    expect(off.button.props.variant).toBe('secondary')
+    expect(off.button.props.dimColor).toBe(true)
     expect(off.help).toMatch(/^A = autonomous mode: off\./)
   }
   await toggle()
+  expect(toasts.some((t) => /^Autonomous mode on/.test(t))).toBe(true)
   for (const surface of ['terminal', 'desktop'] as const) {
     const lit = await look(surface)
-    expect(lit.label.some((n) => n.props?.inverse || n.inverse)).toBe(true)
+    expect(lit.button.props.variant).toBe('primary')
+    expect(lit.button.props.dimColor).toBe(false)
     expect(lit.help).toMatch(/^A = autonomous mode: on\./)
   }
 })

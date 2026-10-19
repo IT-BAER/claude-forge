@@ -1134,9 +1134,8 @@ export function register(on) {
     const hs = handoffState()
     const busy = hs === 'queued' || hs === 'running'
     const handoff = Button({ key: 'handoff', label: busy ? 'handoff ' + hs : 'handoff', hotkey: 'h', plain: true, dimColor: busy, onPress: () => runHandoff($) })
-    // A: no hotkey, because a plain Button draws its hotkey before the label
-    const autoText = auto ? Text({ color: 'cyan', bold: true, inverse: true, children: [' A '] }) : Text({ dimColor: true, children: [' A '] })
-    const autoButton = Button({ key: 'auto', label: 'A', plain: true, hover: { scope: 'ck-auto', underline: true }, children: [autoText], onPress: async () => { now = await $.clock.now(); await setAuto($, !auto) } })
+    // A: a framed button, primary while on; not plain, because a plain Button draws the same with any variant
+    const autoButton = Button({ key: 'auto', label: 'A', variant: auto ? 'primary' : 'secondary', dimColor: !auto, hover: { scope: 'ck-auto', underline: true }, onPress: async () => { now = await $.clock.now(); await setAuto($, !auto, auto ? 'Autonomous mode off.' : 'Autonomous mode on: each ready handoff is cleared and continued without you.') } })
     const rightParts = [autoButton, handoff]
     if (ready() || H.continuing) {
       rightParts.unshift(Button({ key: 'continue', label: H.continuing ? 'clearing' : 'clear and continue', hotkey: 'c', plain: true, onPress: () => clearAndContinue($) }))
