@@ -548,6 +548,30 @@ test('with A on, a turn that ends without a handoff turns A off and clears nothi
   expect(toasts.some((t) => /^Autonomous mode off/.test(t))).toBe(true)
 })
 
+test('with A on, the third handoff within 15 minutes turns A off instead of continuing', async ($, on) => {
+  const { ran, clock, toggle, handoffTurn, live, toasts } = await startAuto($, on)
+  await toggle()
+  for (const id of ['t1', 't2', 't3']) {
+    await handoffTurn(id, true)
+    await clock.advance(6000)
+  }
+  expect(ran.filter((c) => c === 'clear').length).toBe(2)
+  expect(live().auto).toBe(false)
+  expect(live().handoff).toBe('ready')
+  expect(toasts.some((t) => /^Autonomous mode off: 3 handoffs in 15 minutes/.test(t))).toBe(true)
+})
+
+test('with A on, handoffs more than 15 minutes apart keep continuing', async ($, on) => {
+  const { ran, clock, toggle, handoffTurn, live } = await startAuto($, on)
+  await toggle()
+  for (const id of ['t1', 't2', 't3', 't4']) {
+    await handoffTurn(id, true)
+    await clock.advance(8 * 60000)
+  }
+  expect(ran.filter((c) => c === 'clear').length).toBe(4)
+  expect(live().auto).toBe(true)
+})
+
 test('with A on, clear and continue waits for running background agents', async ($, on) => {
   const { ran, clock, toggle, handoffTurn, agents } = await startAuto($, on)
   await toggle()

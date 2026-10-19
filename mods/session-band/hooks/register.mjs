@@ -95,9 +95,14 @@ let auto = false
 const AUTO_GRACE = 3000 // after the turn end: turn.complete is still taking the handoff file
 const AUTO_PROMPT = 'Autonomous mode is on: nobody is at the keyboard. Do not ask the user or wait for approval, "proceed" or "go". Where you would ask or offer a choice, decide with your own recommendation and continue.'
 const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recommended option for each question and continue.'
+// Loop stop: the third ready handoff within 15 minutes turns A off instead of continuing
+const AUTO_LOOP = 3
+const AUTO_LOOP_MS = 15 * 60000
+let autoRuns = [] // when A cleared and continued, newest last
 
 async function setAuto($, on, why) {
   auto = on
+  autoRuns = []
   if (why) $.ui.toast(why, { timeoutMs: 10000 })
   $.ui.invalidate('ui.render')
   await heartbeat($, true)
@@ -106,6 +111,9 @@ async function setAuto($, on, why) {
 async function autoStep($) {
   if (!auto || !ready() || H.continuing || handoffPending || S.waitingSince || S.agentsRunning) return
   if (now - S.lastTurnEnd < AUTO_GRACE) return
+  autoRuns = autoRuns.filter((t) => now - t < AUTO_LOOP_MS)
+  if (autoRuns.length >= AUTO_LOOP - 1) return setAuto($, false, `Autonomous mode off: ${AUTO_LOOP} handoffs in ${AUTO_LOOP_MS / 60000} minutes, possible loop. The handoff waits for c.`)
+  autoRuns.push(now)
   await clearAndContinue($)
   // /clear refused: stop instead of retrying every few seconds
   if (H.text) await setAuto($, false, 'Autonomous mode off: clear and continue failed.')

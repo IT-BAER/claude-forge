@@ -86,6 +86,7 @@ The band does not tell Claude to write handoffs. A new handoff comes from you (`
 | --- | --- |
 | A turn ends without a handoff. Claude found nothing left to do, or the turn broke off. | `Autonomous mode off: the turn ended without a handoff.` |
 | `/clear` failed. The band stops instead of retrying. | `Autonomous mode off: clear and continue failed.` |
+| A third handoff is ready within 15 minutes, for example a chain of "check again later" handoffs. The band does not continue it; it waits for `c`. | `Autonomous mode off: 3 handoffs in 15 minutes, possible loop. The handoff waits for c.` |
 
 ### Before you leave a chat on A
 
