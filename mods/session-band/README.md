@@ -48,6 +48,7 @@ Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band.
 - Cold-send guard: a message into a chat over 150k tokens after its cache expired asks first: Send anyway, Compact first, or Cancel.
 - `/board` shows every local chat in one pane: waiting on you first, then working, then the ones whose cache cools soonest.
 - `/handoff` (or the `handoff` button) runs the bundled `session-handoff` skill, then clears the chat and starts the fresh one from the handoff.
+- The `A` button at the right edge toggles autonomous mode for this chat. While it is lit, each ready handoff is cleared and continued by itself: the chat must be idle for 3 seconds, with nothing waiting on you and no background agents running. Claude is told that nobody is at the keyboard, and each `AskUserQuestion` goes back to Claude to pick its own recommendation. A turn that ends without a handoff turns A off. Permission prompts still follow the permission mode, so run the chat in auto mode for an unattended loop. A lasts until the process ends. Turning it on or off changes the system prompt, so the next send rewrites the cache once.
 - `/cache` shows status and settings: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`.
 - Alerts are off by default. They are the unasked toasts: a big cache about to go cold, and another chat waiting on you. `/cache alerts` toggles them.
 

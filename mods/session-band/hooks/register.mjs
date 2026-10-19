@@ -89,6 +89,28 @@ const H = {
 const ready = () => !!H.text && !S.working
 const RESUME_LINE = /^\s*Continue from session handoff:/i
 
+// Autonomous mode (the band's A): each ready handoff is cleared and continued
+// without you, until a turn ends without one. Lasts for this process.
+let auto = false
+const AUTO_GRACE = 3000 // after the turn end: turn.complete is still taking the handoff file
+const AUTO_PROMPT = 'Autonomous mode is on: nobody is at the keyboard. Do not ask the user or wait for approval, "proceed" or "go". Where you would ask or offer a choice, decide with your own recommendation and continue.'
+const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recommended option for each question and continue.'
+
+async function setAuto($, on, why) {
+  auto = on
+  if (why) $.ui.toast(why, { timeoutMs: 10000 })
+  $.ui.invalidate('ui.render')
+  await heartbeat($, true)
+}
+
+async function autoStep($) {
+  if (!auto || !ready() || H.continuing || handoffPending || S.waitingSince || S.agentsRunning) return
+  if (now - S.lastTurnEnd < AUTO_GRACE) return
+  await clearAndContinue($)
+  // /clear refused: stop instead of retrying every few seconds
+  if (H.text) await setAuto($, false, 'Autonomous mode off: clear and continue failed.')
+}
+
 // session-handoff.md, restart-packet.md, suffixed names (session-handoff-pve.md), or any .md under /handoffs/
 const HANDOFF_FILE = /[^"'\s]*(?:(?:session-handoff|restart-packet)[^"'\s/]*\.md|\/handoffs\/[^"'\s]*\.md)/
 
@@ -245,7 +267,7 @@ async function captureHandoff($, e) {
 }
 
 async function offerContinue($) {
-  if (!H.text) return
+  if (!H.text || auto) return
   let answer = ''
   try {
     answer = await $.ui.ask('Handoff saved. Clear this chat and continue with it in a fresh context?', ['Clear and continue', 'Keep this chat'])
@@ -527,7 +549,7 @@ async function writeLive($, hb, ended) {
       // surfaces unavailable: the reader falls back to matching the cwd
     }
     lastLiveHandoff = handoffState()
-    const live = { ...hb, surfaces, rateLimits: allLimits(), rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, ended }
+    const live = { ...hb, surfaces, rateLimits: allLimits(), rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, auto, ended }
     await $.fs.write(outsidePath('live', hb.id), JSON.stringify(live))
   } catch {
     // a failed write only leaves the outside readers stale
@@ -655,6 +677,7 @@ async function outsideStep($) {
       H.fromFile = false
       $.ui.invalidate('ui.render')
     }
+    await autoStep($)
     if (handoffState() !== lastLiveHandoff) await heartbeat($, true)
   } finally {
     outsideBusy = false
@@ -938,10 +961,18 @@ export function register(on) {
       H.askAfter = false
     } else if (H.armed && e.turnId !== H.notTurn) await captureHandoff($, e)
     else if (!H.text && !H.resuming && e.reason === 'answer' && offeredHandoff(e.answer)) await captureHandoffFile($, offeredHandoff(e.answer))
+    // No handoff from this turn: Claude found nothing left to do (or the turn broke off)
+    if (auto && !H.text && !H.armed && !handoffPending) await setAuto($, false, 'Autonomous mode off: the turn ended without a handoff.')
     refreshModelLimits($).catch(() => {})
     await heartbeat($, true)
     $.ui.invalidate('ui.render')
     return r
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const r = await next(e)
+    if (!auto || !r || !Array.isArray(r.sections)) return r
+    return { ...r, sections: [...r.sections, { id: 'session-band:auto', text: AUTO_PROMPT, scope: 'session' }] }
   })
 
   on('session.compact', async ($, e, next) => {
@@ -970,6 +1001,7 @@ export function register(on) {
   })
 
   on('tool.call', async ($, e, next) => {
+    if (auto && e.tool === 'AskUserQuestion') return { deny: AUTO_ASK }
     if (!e.agentId) S.tool = e.tool
     // Claude calling the handoff skill itself: this turn's answer is the handoff
     if (!e.agentId && e.tool === 'Skill' && HANDOFF_SKILL.test(String(e.skill || '')) && !H.resuming) armHandoff(true)
@@ -1102,11 +1134,14 @@ export function register(on) {
     const hs = handoffState()
     const busy = hs === 'queued' || hs === 'running'
     const handoff = Button({ key: 'handoff', label: busy ? 'handoff ' + hs : 'handoff', hotkey: 'h', plain: true, dimColor: busy, onPress: () => runHandoff($) })
-    let right = handoff
+    // A: no hotkey, because a plain Button draws its hotkey before the label
+    const autoText = auto ? Text({ color: 'cyan', bold: true, inverse: true, children: [' A '] }) : Text({ dimColor: true, children: [' A '] })
+    const autoButton = Button({ key: 'auto', label: 'A', plain: true, hover: { scope: 'ck-auto', underline: true }, children: [autoText], onPress: async () => { now = await $.clock.now(); await setAuto($, !auto) } })
+    const rightParts = [autoButton, handoff]
     if (ready() || H.continuing) {
-      const go = Button({ key: 'continue', label: H.continuing ? 'clearing' : 'clear and continue', hotkey: 'c', plain: true, onPress: () => clearAndContinue($) })
-      right = Box({ flexDirection: 'row', columnGap: 2, children: [go, handoff] })
+      rightParts.unshift(Button({ key: 'continue', label: H.continuing ? 'clearing' : 'clear and continue', hotkey: 'c', plain: true, onPress: () => clearAndContinue($) }))
     }
+    const right = Box({ flexDirection: 'row', columnGap: 2, children: rightParts })
     const mine = Box({ flexDirection: 'row', justifyContent: 'space-between', width: '100%', columnGap: 2, children: [left, right] })
     // Hover help rows sit above the band row, so revealing one leaves the hovered text in place.
     const help = (scope, text) => Box({ display: 'none', hover: { scope, display: 'flex' }, children: [Text({ dimColor: true, italic: true, children: [text] })] })
@@ -1116,6 +1151,7 @@ export function register(on) {
       help('ck-ctx', `ctx = context: ${tokens(S.ctx)} tokens in this session's context window${S.window ? ` of ${tokens(S.window)}` : ''}`),
       help('ck-rewrite', `rwc = rewrite cost: estimated cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
       help('ck-sc', 'sc = session cost: what this session has cost so far, at API list prices'),
+      help('ck-auto', `A = autonomous mode: ${auto ? 'on' : 'off'}. While on, each ready handoff is cleared and continued by itself, and Claude answers its own questions. A turn that ends without a handoff turns it off.`),
     ]
     if (cold) tips.push(help('ck-cr', `cr = cold restarts: ${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`))
     const resets = resetsText(limits, now)
@@ -1147,6 +1183,7 @@ function footerLabel() {
   else if (st.kind === 'cold' && big) parts.push(`cache cold · rewrite ≈ ${money(rewriteCost(S.ctx, S.model, ttlMin()))}`)
   const high = allLimits().filter((l) => limitColor(l, now))
   if (high.length) parts.push(limitsText(high))
+  if (auto) parts.push('autonomous')
   if (ready()) parts.push(`handoff ready · /${names.handoff} continue`)
   return parts.join(' · ')
 }

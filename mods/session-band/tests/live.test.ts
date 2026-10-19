@@ -10,6 +10,7 @@ async function start($: any, on: any, extra: (on: any) => void = () => {}, seed:
   const ran: string[] = []
   const toasts: string[] = []
   const sid = { value: 'sess-1' }
+  const agents = { value: [] as any[] }
   const clock = mock.clock(on, { now: NOW })
   mock.store(on)
   mock.env(on, { USERPROFILE: 'D:\\home\\t', ...env })
@@ -21,7 +22,7 @@ async function start($: any, on: any, extra: (on: any) => void = () => {}, seed:
   extra(on)
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
-  on('agent.list', () => ({ value: [] }))
+  on('agent.list', () => ({ value: agents.value }))
   on('command.list', () => ({ value: [{ name: 'session-handoff', description: '', source: 'user' }] }))
   on('command.run', (_: any, e: any) => { ran.push(e.command); return {} })
   on('ui.toast', (_: any, e: any) => { toasts.push(e.text); return { value: undefined } })
@@ -31,7 +32,7 @@ async function start($: any, on: any, extra: (on: any) => void = () => {}, seed:
   on('fs.write', (_: any, e: any) => { files[norm(e.path)] = e.text; return { value: undefined } })
   await $.session.start({ cwd: 'd:\\VSC\\demo', surface: null, isInteractive: true })
   const live = (id = 'sess-1') => JSON.parse(files[`${BASE}/live/${id}.json`]!)
-  return { files, ran, clock, live, sid, toasts }
+  return { files, ran, clock, live, sid, toasts, agents }
 }
 
 test('heartbeat writes a live status file', async ($, on) => {
@@ -202,7 +203,7 @@ for (const reason of ['answer', 'aborted'] as const) {
     const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
     const buttons = async () => {
       const ui = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'AbovePrompt', props: {} as any })
-      const labels = all(await ui.drawn()).filter((n) => n.type === 'Button').map((n) => n.props.label)
+      const labels = all(await ui.drawn()).filter((n) => n.type === 'Button' && n.props.key !== 'auto').map((n) => n.props.label)
       await ui.unmount()
       return labels
     }
@@ -484,5 +485,115 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
     expect(helpText(drawn, 'ck-limits')).toBe('plan limits: 5h (5-hour window) · w (weekly, all models)')
     expect(drawn.find((n) => n.type === 'Box' && n.children?.some((c: any) => c === kept))?.props?.flexWrap).toBe('wrap')
     await ui.unmount()
+  }
+})
+
+// Autonomous mode: the band's A toggle
+const COMPOSE = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+async function startAuto($: any, on: any) {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  const submitted: string[] = []
+  const ctx = await start($, on, (on) => {
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('prompt.submit', (_: any, e: any) => { submitted.push(e.text); return { text: e.text } })
+    on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' }] }))
+    on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
+    on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); return { result: { text: '' } } })
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  const files = ctx.files
+  const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
+  const band = async (surface: 'terminal' | 'desktop' = 'terminal') => {
+    const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
+    const drawn = all(await ui.drawn())
+    return { ui, drawn }
+  }
+  const toggle = async () => {
+    const { ui } = await band()
+    await ui.press({ key: 'auto' })
+    await ui.unmount()
+  }
+  const handoffTurn = async (id: string, write: boolean) => {
+    await $.turn.start({ turnId: id } as any)
+    if (write) await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+    await $.turn.complete({ reason: 'answer', answer: write ? 'Handoff written.' : 'All done.', durationMs: 1, isAborted: false, turnId: id } as any)
+  }
+  return { ...ctx, submitted, band, toggle, handoffTurn, all }
+}
+
+for (const on_ of [true, false]) {
+  test(`with A ${on_ ? 'on' : 'off'}, a ready handoff ${on_ ? 'is cleared and continued once the session is idle' : 'waits for c'}`, async ($, on) => {
+    const { ran, clock, submitted, toggle, handoffTurn, live } = await startAuto($, on)
+    if (on_) await toggle()
+    expect(live().auto).toBe(on_)
+    await handoffTurn('t1', true)
+    expect(live().handoff).toBe('ready')
+    // a short grace after the turn end
+    await clock.advance(2000)
+    expect(ran).not.toContain('clear')
+    await clock.advance(4000)
+    expect(ran.includes('clear')).toBe(on_)
+    expect(submitted.some((t) => t.startsWith(`Continue from session handoff: read ${HF}`))).toBe(on_)
+  })
+}
+
+test('with A on, a turn that ends without a handoff turns A off and clears nothing', async ($, on) => {
+  const { ran, clock, toggle, handoffTurn, live, toasts } = await startAuto($, on)
+  await toggle()
+  await handoffTurn('t1', false)
+  await clock.advance(6000)
+  expect(ran).not.toContain('clear')
+  expect(live().auto).toBe(false)
+  expect(toasts.some((t) => /^Autonomous mode off/.test(t))).toBe(true)
+})
+
+test('with A on, clear and continue waits for running background agents', async ($, on) => {
+  const { ran, clock, toggle, handoffTurn, agents } = await startAuto($, on)
+  await toggle()
+  agents.value = [{ status: 'running' }]
+  await handoffTurn('t1', true)
+  await clock.advance(6000)
+  expect(ran).not.toContain('clear')
+  agents.value = []
+  await clock.advance(30000)
+  expect(ran).toContain('clear')
+})
+
+test('with A on, the system prompt says nobody is at the keyboard and questions go back to Claude', async ($, on) => {
+  const { toggle } = await startAuto($, on)
+  const ask = { tool: 'AskUserQuestion', input: { questions: [] } } as any
+  expect((await $.prompt.compose(COMPOSE)).sections.map((s: any) => s.id)).toEqual(['intro'])
+  expect((await $.tool.call(ask) as any).deny).toBeUndefined()
+  await toggle()
+  const sections = (await $.prompt.compose(COMPOSE)).sections
+  expect(sections.map((s: any) => [s.id, s.scope])).toEqual([['intro', 'shared'], ['session-band:auto', 'session']])
+  expect(sections[1].text).toMatch(/nobody is at the keyboard/)
+  expect((await $.tool.call(ask) as any).deny).toMatch(/recommended option/)
+  await toggle()
+  expect((await $.prompt.compose(COMPOSE)).sections.map((s: any) => s.id)).toEqual(['intro'])
+})
+
+test('the A button is highlighted while on and explains itself on hover', async ($, on) => {
+  const { band, toggle, all } = await startAuto($, on)
+  const look = async (surface: 'terminal' | 'desktop') => {
+    const { ui, drawn } = await band(surface)
+    const button = drawn.find((n) => n.type === 'Button' && n.props.key === 'auto')
+    const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-auto' && n.hover?.display === 'flex')
+    await ui.unmount()
+    return { button, label: all(button).filter((n) => n.type === 'Text'), help: all(help).find((n) => n.type === 'Text')?.children.join('') }
+  }
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const off = await look(surface)
+    expect(off.button.props.label).toBe('A')
+    expect(off.button.hover?.scope).toBe('ck-auto')
+    expect(off.label.some((n) => n.props?.inverse || n.inverse)).toBe(false)
+    expect(off.help).toMatch(/^A = autonomous mode: off\./)
+  }
+  await toggle()
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const lit = await look(surface)
+    expect(lit.label.some((n) => n.props?.inverse || n.inverse)).toBe(true)
+    expect(lit.help).toMatch(/^A = autonomous mode: on\./)
   }
 })
