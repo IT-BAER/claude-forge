@@ -1,9 +1,11 @@
 {
   "name": "prompt-templates",
-  "version": "0.1.0",
   "description": "Prompt template library in a pane: search, tags, {{variables}}, fill, insert, send or copy; /prompts",
   "author": {
     "name": "IT-BAER"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "libraryFile": { "type": "string", "title": "Library file (.json)", "description": "Keep the templates in this JSON file instead of the plugin store, for example ~/.claude/prompt-templates.json in a folder you sync with git. Empty keeps them in the plugin store. A missing file is created from the stored templates on first use.", "default": "" }
+  }
 }

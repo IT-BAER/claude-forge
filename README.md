@@ -65,6 +65,8 @@ git clone https://github.com/IT-BAER/claude-forge.git
 mkdir -p ~/.claude/skills
 rm -rf ~/.claude/skills/file-explorer
 cp -r claude-forge/mods/file-explorer ~/.claude/skills/file-explorer
+rm -rf ~/.claude/skills/prompt-templates
+cp -r claude-forge/mods/prompt-templates ~/.claude/skills/prompt-templates
 ```
 
 PowerShell:
@@ -73,15 +75,19 @@ PowerShell:
 git clone https://github.com/IT-BAER/claude-forge.git
 Remove-Item "$HOME\.claude\skills\file-explorer" -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item claude-forge\mods\file-explorer "$HOME\.claude\skills\file-explorer" -Recurse
+Remove-Item "$HOME\.claude\skills\prompt-templates" -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item claude-forge\mods\prompt-templates "$HOME\.claude\skills\prompt-templates" -Recurse
 ```
 
-To try a mod for one session only: `claude --plugin-dir claude-forge/mods/file-explorer`.
+To try a mod for one session only: `claude --plugin-dir claude-forge/mods/file-explorer` or `claude --plugin-dir claude-forge/mods/prompt-templates`.
 
 ### Update and remove
 
 ```bash
 claude plugin update file-explorer@claude-forge
+claude plugin update prompt-templates@claude-forge
 claude plugin uninstall file-explorer@claude-forge
+claude plugin uninstall prompt-templates@claude-forge
 ```
 
 The marketplace plugin has no pinned version, so every new commit in this repository counts as an update. For a copied folder, pull the repository and run the `rm` and `cp` lines again, or delete the folder in `~/.claude/skills/`.

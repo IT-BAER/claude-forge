@@ -4,7 +4,7 @@ import type { Register } from 'claude-code'
 import type { Action, Editor, Template, View } from '../types'
 import { COLORS, HEAD, highlight, layout } from './editor'
 import type { EditorProps } from './editor'
-import { exportJson, filterTemplates, findByName, mergeImport, parseImport, parseTags, parseVars, renderTemplate, tagsOf, validateTemplate } from './templates'
+import { exportJson, filterTemplates, findByName, libraryJson, mergeImport, parseImport, parseLibrary, parseTags, parseVars, renderTemplate, tagsOf, validateTemplate } from './templates'
 
 const PANE = 'prompt-templates'
 const TITLE = 'Prompts'
@@ -19,6 +19,7 @@ const CONTROL = /[\x00-\x1f\x7f-\x9f]/
 const EMPTY: View = { mode: 'list', query: '', tag: '', selected: '', vars: {}, ioPath: '', notice: '', error: '', tick: 0 }
 const view = atom({ plugin: 'prompt-templates', key: 'view' } as const, EMPTY)
 let paneOpen = false
+let libraryFile = ''
 
 const clean = (error: unknown) => String((error as Error)?.message ?? error).replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').slice(0, 300)
 const current = async ($: any): Promise<View> => ({ ...EMPTY, ...(await read($, view)) })
@@ -28,16 +29,39 @@ const isTemplate = (t: any): t is Template =>
   !!t && typeof t.id === 'string' && typeof t.name === 'string' && typeof t.body === 'string' && Array.isArray(t.tags)
 const firstLine = (body: string) => body.split('\n').find(l => l.trim())?.trim().slice(0, 200) ?? ''
 
-async function loadAll($: any): Promise<Template[]> {
+async function loadStore($: any): Promise<Template[]> {
   const value = await $.store.get(KEY)
   return Array.isArray(value) ? value.filter(isTemplate) : []
 }
 
-// Read-modify-write on the store, so a save from another session is not overwritten by a stale copy.
+async function libraryPath($: any) {
+  if (!libraryFile) return ''
+  try { return await resolvePath($, libraryFile) } catch (error) { throw new Error(`libraryFile option: ${clean(error)}`) }
+}
+
+// A missing library file is seeded once from the store, which keeps its copy; an invalid one throws, so nothing overwrites it.
+async function loadAll($: any): Promise<Template[]> {
+  const path = await libraryPath($)
+  if (!path) return loadStore($)
+  if (!(await $.fs.exists(path))) {
+    const seed = await loadStore($)
+    if (seed.length) await $.fs.write(path, libraryJson(seed))
+    return seed
+  }
+  const parsed = parseLibrary(await $.fs.read(path))
+  if ('error' in parsed) throw new Error(`The library file ${path} is not valid: ${parsed.error}`)
+  return parsed.templates
+}
+
+// Read-modify-write on the library, so a save from another session is not overwritten by a stale copy.
 async function mutate($: any, fn: (list: Template[]) => Template[]) {
+  const path = await libraryPath($)
   const next = fn(await loadAll($))
-  if (JSON.stringify(next).length > STORE_LIMIT) throw new Error('The template library would exceed the 4 MiB store limit.')
-  await $.store.set(KEY, next)
+  if (path) await $.fs.write(path, libraryJson(next))
+  else {
+    if (JSON.stringify(next).length > STORE_LIMIT) throw new Error('The template library would exceed the 4 MiB store limit.')
+    await $.store.set(KEY, next)
+  }
   await setView($, v => ({ tick: v.tick + 1 }))
 }
 
@@ -339,7 +363,8 @@ function rowSvg(text: string, kinds: Uint8Array | undefined, from: number, left:
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><g font-family="Cascadia Mono,Consolas,ui-monospace,monospace" font-size="${G.codeFont}">${runs.join('').replace(/<text /g, `<text y="${(h * G.codeBase).toFixed(2)}" `)}</g></svg>`
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  libraryFile = typeof options.libraryFile === 'string' ? options.libraryFile.trim() : ''
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'prompts', description: 'Toggle the prompt templates pane; /prompts <name> fills that template', argumentHint: '[name]' })
     return next(e)

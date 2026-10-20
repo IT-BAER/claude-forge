@@ -76,6 +76,22 @@ export function parseImport(text: string): { templates: TemplateDraft[] } | { er
   return { templates }
 }
 
+// The synced library file: the export format plus id and updatedAt, sorted by name so diffs stay small.
+export function libraryJson(list: readonly Template[]): string {
+  return JSON.stringify({ version: 1, templates: [...list].sort(byName).map(t => ({ id: t.id, name: t.name, tags: t.tags, body: t.body, updatedAt: t.updatedAt })) }, null, 2) + '\n'
+}
+
+export function parseLibrary(text: string): { templates: Template[] } | { error: string } {
+  const parsed = parseImport(text)
+  if ('error' in parsed) return parsed
+  const data = JSON.parse(text)
+  const items: any[] = Array.isArray(data) ? data : data.templates
+  return { templates: parsed.templates.map((d, i) => {
+    const it = items[i]
+    return { id: typeof it.id === 'string' && it.id ? it.id : `name:${d.name.toLowerCase()}`, ...d, updatedAt: Number.isFinite(it.updatedAt) ? it.updatedAt : 0 }
+  }) }
+}
+
 export function mergeImport(existing: readonly Template[], incoming: readonly TemplateDraft[], mode: 'replace' | 'skip', now: number, newId: () => string) {
   const list = [...existing]
   let added = 0, replaced = 0, skipped = 0

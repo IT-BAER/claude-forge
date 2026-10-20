@@ -39,6 +39,7 @@ export function setup($: any, on: any, templates: unknown = LIB) {
   const norm = (p: string) => p.replace(/\\/g, '/')
   on('fs.read', (_: any, e: any) => { if (!(norm(e.path) in files)) throw new Error('missing'); return { value: files[norm(e.path)] } })
   on('fs.write', (_: any, e: any) => { files[norm(e.path)] = e.text; return { value: undefined } })
+  on('fs.exists', (_: any, e: any) => ({ value: norm(e.path) in files }))
   const mount = (surface: (typeof SURFACES)[number]) => $.ui.mount({ ...pane, surface })
   return { mount, store, filled, sent, files, copied: () => copied, opened: () => opened, closed: () => closed, view: () => value }
 }

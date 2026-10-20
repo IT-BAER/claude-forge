@@ -98,12 +98,24 @@ The file format:
 
 ### Storage
 
-Templates live in the mod's own store, a JSON file in your Claude Code configuration folder. They are the same in every session on this computer. They do not sync to other computers: use Export and Import for that, and for backups.
+By default, templates live in the mod's own store, a JSON file in your Claude Code configuration folder. They are the same in every session on this computer, but they do not sync to other computers.
+
+To sync them, set the `libraryFile` option to a JSON file in a folder you sync, for example with git:
+
+```json
+"pluginConfigs": {
+  "prompt-templates@claude-forge": { "options": { "libraryFile": "~/.claude/prompt-templates.json" } }
+}
+```
+
+Put this in `~/.claude/settings.json`, or set it in `/config`. On first use, a missing file is created from the templates in the store; the store keeps its copy as a backup. After that the pane reads and writes only the file. It is sorted by name, so a git diff shows only the templates that changed. If the file is not valid JSON, the pane shows the error and does not overwrite the file. The last variable values stay in the store.
+
+Export and Import still work in both modes, for example for backups.
 
 ## Limits
 
 - A template body holds up to 30,000 characters; a name up to 80; up to 10 tags of 30 characters each.
-- The whole library is limited to about 3.75 MiB.
+- In the store, the whole library is limited to about 3.75 MiB. A library file has no such limit.
 - Copy needs a surface with clipboard access. Where there is none, the pane says so.
 - The pane needs Claude Code's mod API, which changes between releases. After an upgrade the mod can need an update.
 
