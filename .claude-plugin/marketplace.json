@@ -11,6 +11,11 @@
       "description": "VS Code style file tree of the session's working directory in a pane"
     },
     {
+      "name": "prompt-templates",
+      "source": "./mods/prompt-templates",
+      "description": "Prompt template library in a pane: search, tags, {{variables}}, fill, insert, send or copy; /prompts"
+    },
+    {
       "name": "session-band",
       "source": "./mods/session-band",
       "description": "Prompt cache status band with hover help, cold-send guard, keep-warm, /board, /handoff and an autonomous mode. Fork of Cache Keeper by Nate Herk."

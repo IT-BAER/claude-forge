@@ -1,0 +1,9 @@
+{
+  "name": "prompt-templates",
+  "version": "0.1.0",
+  "description": "Prompt template library in a pane: search, tags, {{variables}}, fill, insert, send or copy; /prompts",
+  "author": {
+    "name": "IT-BAER"
+  },
+  "types": "./types/index.d.ts"
+}
