@@ -52,8 +52,16 @@ claude --plugin-dir path/to/claude-forge/mods/prompt-templates
 | `/prompts` | Open or close the pane |
 | `/prompts <name>` | Fill the prompt box with that template. A unique start of the name is enough. A template with variables opens its form in the pane. |
 
+## Requirements
+
+- Claude Code 2.1.x with the mod API, in the desktop app (Code tab) or the terminal. Other surfaces show a short notice.
+- Windows for Ctrl+V in the editor, which reads the clipboard with `powershell.exe`. Everything else works on any system.
+
+## Features
+
 ### The list
 
+- New and Import/Export sit at the top, above the search box.
 - The search box matches names, text and tags. Tag buttons filter the list; press a tag again to clear the filter.
 - Each template has four actions:
 
@@ -72,7 +80,7 @@ Write `{{name}}` in a template for a value you fill in each time, for example `R
 
 When a template has variables, its action opens a form with one field per variable and a preview of the result. Enter in the last field runs the action you chose; the other actions sit below the preview. The form remembers the last value of each variable.
 
-### Editing
+### Editor
 
 New and Edit open the editor: a name field, a tags field (comma separated) and the body editor. The body editor is the one from [`file-explorer`](../file-explorer): syntax colours for Markdown, soft wrap (the Wrap button switches it), undo and redo, find and replace with Ctrl+F and Ctrl+H, and clipboard keys.
 
@@ -88,14 +96,9 @@ The file format:
 { "version": 1, "templates": [{ "name": "Review", "tags": ["dev"], "body": "Review {{file}} for {{topic}}" }] }
 ```
 
-## Storage
+### Storage
 
 Templates live in the mod's own store, a JSON file in your Claude Code configuration folder. They are the same in every session on this computer. They do not sync to other computers: use Export and Import for that, and for backups.
-
-## Requirements
-
-- Claude Code 2.1.x with the mod API, in the desktop app (Code tab) or the terminal. Other surfaces show a short notice.
-- Windows for Ctrl+V in the editor, which reads the clipboard with `powershell.exe`. Everything else works on any system.
 
 ## Limits
 
