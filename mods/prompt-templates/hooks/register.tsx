@@ -527,13 +527,12 @@ export const register: Register = on => {
       const shown = filterTemplates(all, v.query, tags.includes(v.tag) ? v.tag : '')
       return (
         <Box flexDirection="column" paddingX={1} gap={1}>
+          {/* The desktop draws an Input full width, so the buttons get a row of their own. */}
           <Box flexDirection="row" gap={1}>
-            <Box flexGrow={1}>
-              <Input key="search" placeholder="Search templates" value={v.query} onInput={query => setView($, { query })} onSubmit={query => setView($, { query })} />
-            </Box>
             <Button key="new" label="New" variant="primary" onPress={() => openEditor($)} />
             <Button key="io" label="Import/Export" onPress={() => openIo($)} />
           </Box>
+          <Input key="search" placeholder="Search templates" value={v.query} onInput={query => setView($, { query })} onSubmit={query => setView($, { query })} />
           {tags.length > 0 && (
             <Box flexDirection="row" gap={1} flexWrap="wrap">
               {tags.map(tag => <Button key={`tag:${tag}`} label={`#${tag}`} variant={v.tag === tag ? 'primary' : 'secondary'}
