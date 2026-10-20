@@ -983,6 +983,8 @@ export function register(on) {
     await heartbeat($, true)
     // No handoff from this turn and no background work to wait for: nothing left to do (or the turn broke off)
     if (auto && !H.text && !H.armed && !handoffPending && !waitsForWork()) await setAuto($, false, 'Autonomous mode off: the turn ended without a handoff.')
+    // clear right after the grace instead of on the next 2 s tick
+    if (auto && H.text) $.clock.after(AUTO_GRACE, () => outsideStep($).catch(() => {}))
     refreshModelLimits($).catch(() => {})
     $.ui.invalidate('ui.render')
     return r

@@ -547,6 +547,16 @@ for (const on_ of [true, false]) {
   })
 }
 
+test('with A on, a ready handoff is cleared right at the end of the 3 s grace, not on a later tick', async ($, on) => {
+  const { ran, clock, toggle, handoffTurn } = await startAuto($, on)
+  await toggle()
+  await handoffTurn('t1', true)
+  await clock.advance(2999)
+  expect(ran).not.toContain('clear')
+  await clock.advance(1)
+  expect(ran).toContain('clear')
+})
+
 test('with A on, a turn that ends without a handoff turns A off and clears nothing', async ($, on) => {
   const { ran, clock, toggle, handoffTurn, live, toasts } = await startAuto($, on)
   await toggle()
