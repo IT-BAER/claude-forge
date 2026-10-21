@@ -848,9 +848,11 @@ export function register(on) {
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
     $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
+    // Run the mods below first: the startup command list misses commands they register late.
+    const result = await next(e)
     await restoreSession($)
     refreshModelLimits($).catch(() => {})
-    return next(e)
+    return result
   })
 
   // A /clear or /resume ends the chat but not the process: no heartbeat may
