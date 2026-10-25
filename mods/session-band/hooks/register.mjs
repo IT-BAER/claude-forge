@@ -99,6 +99,8 @@ const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recomme
 const AUTO_LOOP = 3
 const AUTO_LOOP_MS = 15 * 60000
 let autoRuns = [] // when A cleared and continued, newest last
+// The afk-shutdown watcher counts a session finished by this last answer line; continuing would start new work
+const AFK_END = /\n?\s*\[afk-shutdown\] (?:DONE|BLOCKED) handoff=\S+[^\n]*\s*$/
 // Background shells: a turn that waits for one does not end the loop. An id goes when a turn starts
 // with its notification, or after AUTO_BG_MS (a notification read inside a busy turn goes unseen).
 const AUTO_BG_MS = 2 * 3600000
@@ -985,6 +987,7 @@ export function register(on) {
     await heartbeat($, true)
     // No handoff from this turn and no background work to wait for: nothing left to do (or the turn broke off)
     if (auto && !H.text && !H.armed && !handoffPending && !waitsForWork()) await setAuto($, false, 'Autonomous mode off: the turn ended without a handoff.')
+    if (auto && e.reason === 'answer' && AFK_END.test(String(e.answer || ''))) await setAuto($, false, 'Autonomous mode off: the turn ended with the afk-shutdown end line, so this session is finished. The handoff waits for c.')
     // clear right after the grace instead of on the next 2 s tick
     if (auto && H.text) $.clock.after(AUTO_GRACE, () => outsideStep($).catch(() => {}))
     refreshModelLimits($).catch(() => {})
@@ -1175,7 +1178,7 @@ export function register(on) {
       help('ck-ctx', `ctx = context: ${tokens(S.ctx)} tokens in this session's context window${S.window ? ` of ${tokens(S.window)}` : ''}`),
       help('ck-rewrite', `rwc = rewrite cost: estimated cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
       help('ck-sc', 'sc = session cost: what this session has cost so far, at API list prices'),
-      help('ck-auto', `A = autonomous mode: ${auto ? 'on' : 'off'}. While on, each ready handoff is cleared and continued by itself, and Claude answers its own questions. A turn that ends without a handoff turns it off.`),
+      help('ck-auto', `A = autonomous mode: ${auto ? 'on' : 'off'}. While on, each ready handoff is cleared and continued by itself, and Claude answers its own questions. A turn that ends without a handoff, or with the afk-shutdown end line, turns it off.`),
     ]
     if (cold) tips.push(help('ck-cr', `cr = cold restarts: ${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`))
     const resets = resetsText(limits, now)

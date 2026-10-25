@@ -85,6 +85,7 @@ The band does not tell Claude to write handoffs. A new handoff comes from you (`
 | Event | Toast |
 | --- | --- |
 | A turn ends without a handoff and with no background work left. Claude found nothing left to do, or the turn broke off. | `Autonomous mode off: the turn ended without a handoff.` |
+| The turn's answer ends with an afk-shutdown end line (`[afk-shutdown] DONE handoff=...` or `BLOCKED ...`). The afk-shutdown watcher counts the session as finished, so continuing would start new work while the PC waits to shut down. The handoff waits for `c`. | `Autonomous mode off: the turn ended with the afk-shutdown end line, so this session is finished. The handoff waits for c.` |
 | `/clear` failed. The band stops instead of retrying. | `Autonomous mode off: clear and continue failed.` |
 | A third handoff is ready within 15 minutes, for example a chain of "check again later" handoffs. The band does not continue it; it waits for `c`. | `Autonomous mode off: 3 handoffs in 15 minutes, possible loop. The handoff waits for c.` |
 

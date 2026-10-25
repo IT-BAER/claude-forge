@@ -567,6 +567,33 @@ test('with A on, a turn that ends without a handoff turns A off and clears nothi
   expect(toasts.some((t) => /^Autonomous mode off/.test(t))).toBe(true)
 })
 
+for (const end of ['DONE', 'BLOCKED']) {
+  test(`with A on, a handoff turn that ends with the afk-shutdown ${end} line turns A off and keeps the handoff for c`, async ($, on) => {
+    const { ran, clock, toggle, live, toasts } = await startAuto($, on)
+    await toggle()
+    await $.turn.start({ turnId: 't1' } as any)
+    await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+    const tail = end === 'DONE' ? '' : ' reason=needs-approval'
+    await $.turn.complete({ reason: 'answer', answer: `Handoff written.\n\n[afk-shutdown] ${end} handoff=${HF}${tail}\n`, durationMs: 1, isAborted: false, turnId: 't1' } as any)
+    await clock.advance(6000)
+    expect(ran).not.toContain('clear')
+    expect(live().auto).toBe(false)
+    expect(live().handoff).toBe('ready')
+    expect(toasts.some((t) => /^Autonomous mode off: the turn ended with the afk-shutdown end line/.test(t))).toBe(true)
+  })
+}
+
+test('with A on, an afk-shutdown end line quoted earlier in the answer does not stop the continue', async ($, on) => {
+  const { ran, clock, toggle, live } = await startAuto($, on)
+  await toggle()
+  await $.turn.start({ turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Write', file_path: HF, content: '...' } as any)
+  await $.turn.complete({ reason: 'answer', answer: `The end line will be [afk-shutdown] DONE handoff=${HF}\nHandoff written; continuing.`, durationMs: 1, isAborted: false, turnId: 't1' } as any)
+  await clock.advance(6000)
+  expect(ran).toContain('clear')
+  expect(live().auto).toBe(true)
+})
+
 test('with A on, a turn that ends while a background shell runs keeps A on, and its wake-up turn continues the handoff', async ($, on) => {
   const { ran, clock, shell, toggle, turn, live } = await startAuto($, on)
   await toggle()
