@@ -2,7 +2,7 @@
 
 A Claude Code mod for Windows: the Claude desktop app, the VS Code extension and the CLI. Every few minutes it:
 
-1. Releases Code sessions that had no activity for longer than a limit (default 60 minutes): it stops the session's own process tree (`claude.exe`, its MCP servers, shells and helpers). The session stays in the sidebar, keeps its conversation, and the app starts a fresh process when you open it again and send a message. Running sessions, and sessions whose side session is still working, are skipped. Pinned sessions are released like any other.
+1. Releases Code sessions that had no activity for longer than a limit (default 60 minutes): it stops the session's own process tree (`claude.exe`, its MCP servers, shells and helpers). The session stays in the sidebar, keeps its conversation, and the app starts a fresh process when you open it again and send a message. Running sessions, and sessions whose side session is still working, are skipped, except a session still shown as running with no activity for `stuckMinutes` (default 12 hours). Pinned sessions are released like any other. The session doing the work releases itself last once it is idle too, so the next active session takes over.
 2. Releases VS Code and CLI sessions the same way after the same limit, their `claude.exe` included. Each such session records when its last turn started or ended; a session with a turn in progress, a background task (shell, monitor, subagent, workflow) or a scheduled wakeup (`/loop`, CronCreate, ScheduleWakeup) is skipped. The conversation stays in its transcript on disk.
 3. Optionally archives sessions idle for longer than a second limit (`archiveMinutes`, off by default). Running and pinned sessions are skipped; the app itself also refuses sessions that are open on screen or still have background work. Archived sessions can be restored from the Archived list.
 4. Stops process trees that a session left behind. It records every process a `claude.exe` started (MCP servers, dev servers, shells). Once that `claude.exe` is gone, a tree is stopped only when every process in it is at least 60 minutes old and used almost no CPU since the previous check. `chrome.exe`, `msedge.exe`, `Code.exe`, `claude.exe`, `explorer.exe` and `WindowsTerminal.exe` are never stopped (a released session's own `claude.exe` is the one exception).
@@ -38,6 +38,7 @@ Each desktop Code session keeps its own `claude.exe` (about 0.4 GB) plus its own
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `idleMinutes` | 60 | Release a session idle for this many minutes (stop its process tree; a desktop session stays in the sidebar, a VS Code or CLI session in its transcript) |
+| `stuckMinutes` | 720 | Release a session the app still shows as running after this many minutes without activity; 0 = never |
 | `archiveMinutes` | 0 | Also archive a session idle for this many minutes; 0 = never |
 | `orphanMinutes` | 60 | Minimum age of every process in a left-behind tree |
 | `cpuIdleMs` | 1000 | Most CPU time (ms) a process may use between two checks and still count as idle |

@@ -7,7 +7,8 @@ const TICK = 5 * MIN
 type Row = { pid: number; ppid: number; name: string; created: string; cpu: number }
 // desk: false is a host without the app's ccd_session_mgmt server (CLI, VS Code).
 // app: the desktop app's main claude.exe above the session's own (null: none, as under CLI or VS Code).
-type World = { id?: string; self?: Row; app?: Row | null; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[]; desk?: boolean }
+// me: what get_session reports for the session the mod runs in (list_sessions leaves it out).
+type World = { id?: string; self?: Row; app?: Row | null; store?: Record<string, unknown>; sessions?: unknown[]; procs?: Row[]; desk?: boolean; me?: Record<string, unknown> }
 
 // Windows FILETIME (100 ns since 1601) as procs.ps1 prints it.
 const ft = (ms: number) => String((ms + 11_644_473_600_000) * 10_000)
@@ -43,7 +44,7 @@ async function start($: any, on: any, w: World) {
     const reply = (text: string) => ({ value: { isError: false, content: [{ type: 'text', text }] } })
     if (w.desk === false) return { value: { isError: true, content: [] } }
     if (e.tool === 'list_sessions') return reply(JSON.stringify(w.sessions ?? []))
-    if (e.tool === 'get_session') return reply(JSON.stringify({ sessionId: w.id ?? 'me' }))
+    if (e.tool === 'get_session') return reply(JSON.stringify({ sessionId: w.id ?? 'me', ...w.me }))
     archived.push(e.args.session_id)
     return reply('Archived')
   })
@@ -172,13 +173,64 @@ test('releases idle sessions, pinned included; keeps chrome, running, recent one
   expect(archived).toEqual([])
 })
 
-test('never releases the session it runs in', async ($, on) => {
+test('never releases the session it runs in while that session is active', async ($, on) => {
   const self = row(50, 1, 'claude.exe', 120)
   const w: World = {
     id: 'me', self,
     procs: [self, row(51, 50, 'node.exe', 120)],
     sessions: [session('me', 90)],
+    me: { lastActivityAt: ago(30) },
   }
+  const { clock, killed } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(killed).toEqual([])
+})
+
+test('an idle leader releases the others, then hands the lead on and releases itself last', async ($, on) => {
+  const self = row(50, 1, 'claude.exe', 120)
+  const procs = [self, row(51, 50, 'node.exe', 120), row(10, 1, 'claude.exe', 120), row(11, 10, 'node.exe', 120)]
+  const w: World = {
+    id: 'me', self, procs,
+    store: { owned: { old: owned(procs[2]) } },
+    sessions: [session('old', 90)],
+    me: { lastActivityAt: ago(90) },
+  }
+  const { clock, killed, store } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(killed.map(k => Number(k.split(':')[0]))).toEqual([10, 11, 51, 50])
+  expect(store.apps).toEqual({})
+})
+
+test('an idle leader keeps itself while running or while its side session works', async ($, on) => {
+  const self = row(50, 1, 'claude.exe', 120)
+  const w: World = {
+    id: 'me', self,
+    procs: [self, row(51, 50, 'node.exe', 120)],
+    sessions: [session('side', 90, { isRunning: true, startedBy: 'me' })],
+    me: { lastActivityAt: ago(90), isRunning: true },
+  }
+  const { clock, killed } = await start($, on, w)
+  await clock.advance(TICK)
+  w.me = { lastActivityAt: ago(90) }
+  await clock.advance(TICK)
+  expect(killed).toEqual([])
+})
+
+test('releases a session stuck at running past stuckMinutes; keeps a running one with recent activity', async ($, on) => {
+  const procs = [row(10, 1, 'claude.exe', 900), row(11, 10, 'node.exe', 900), row(20, 1, 'claude.exe', 900), row(21, 20, 'node.exe', 900)]
+  const w: World = {
+    procs,
+    store: { owned: { stuck: owned(procs[0]), running: owned(procs[2]) } },
+    sessions: [session('stuck', 800, { isRunning: true }), session('running', 90, { isRunning: true })],
+  }
+  const { clock, pids } = await start($, on, w)
+  await clock.advance(TICK)
+  expect(pids()).toEqual([10, 11])
+})
+
+test('with stuckMinutes 0, never releases a running session', { options: { stuckMinutes: 0 } }, async ($, on) => {
+  const procs = [row(10, 1, 'claude.exe', 900), row(11, 10, 'node.exe', 900)]
+  const w: World = { procs, store: { owned: { stuck: owned(procs[0]) } }, sessions: [session('stuck', 800, { isRunning: true })] }
   const { clock, killed } = await start($, on, w)
   await clock.advance(TICK)
   expect(killed).toEqual([])

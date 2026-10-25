@@ -5,7 +5,8 @@
     "name": "IT-BAER"
   },
   "userConfig": {
-    "idleMinutes": { "type": "number", "title": "Release after idle minutes", "description": "Stop the process tree of a session with no activity for this many minutes. A desktop session stays in the sidebar and restarts when opened; a VS Code or CLI session loses its claude.exe and keeps its transcript. Running sessions, sessions with a working side session, background task or scheduled wakeup are never released.", "default": 60 },
+    "idleMinutes": { "type": "number", "title": "Release after idle minutes", "description": "Stop the process tree of a session with no activity for this many minutes. A desktop session stays in the sidebar and restarts when opened; a VS Code or CLI session loses its claude.exe and keeps its transcript. Running sessions, sessions with a working side session, background task or scheduled wakeup are not released.", "default": 60 },
+    "stuckMinutes": { "type": "number", "title": "Release stuck running sessions after minutes (0 = never)", "description": "Release a desktop session the app still shows as running after this many minutes without activity.", "default": 720 },
     "archiveMinutes": { "type": "number", "title": "Archive after idle minutes (0 = never)", "description": "Also archive a session with no activity for this many minutes. Running and pinned sessions are never archived.", "default": 0 },
     "orphanMinutes": { "type": "number", "title": "Orphan minimum age (minutes)", "description": "Stop a left-behind process tree only when every process in it is at least this old.", "default": 60 },
     "cpuIdleMs": { "type": "number", "title": "Idle CPU limit (ms per check)", "description": "A left-behind process tree counts as idle when each process used at most this much CPU time since the previous check.", "default": 1000 },

@@ -18,7 +18,7 @@ const key = (r: Proc) => `${r.pid}:${r.created}`
 // procs.ps1 prints creation as FILETIME (100 ns since 1601); dropping 4 digits keeps the number exact.
 const createdMs = (created: string) => Number(created.slice(0, -4)) - 11_644_473_600_000
 
-type Cfg = { idleMs: number; archiveMs: number; orphanMs: number; cpuIdle: number; intervalMs: number }
+type Cfg = { idleMs: number; archiveMs: number; orphanMs: number; cpuIdle: number; intervalMs: number; stuckMs: number }
 
 function log($: Engine, text: string) {
   return $.ui.log(`session-reaper: ${text}`, { to: 'debug' })
@@ -111,6 +111,9 @@ async function listSessions($: Engine) {
 }
 
 const idle = (s: Session, now: number, ms: number) => now - Date.parse(s.lastActivityAt ?? '') > ms
+// Releasable: idle past the limit; a session the app still shows as running only once stuck past stuckMs (0: never).
+const quiet = (s: Session, now: number, cfg: Cfg) =>
+  idle(s, now, cfg.idleMs) && (!s.isRunning || (cfg.stuckMs > 0 && idle(s, now, cfg.stuckMs)))
 
 async function archiveIdle($: Engine, now: number, cfg: Cfg, sessions: Session[]) {
   for (const s of sessions) {
@@ -158,7 +161,7 @@ async function releaseIdle($: Engine, now: number, cfg: Cfg, sessions: Session[]
     const root = live.get(key(proc))
     if (!root || root.name.toLowerCase() !== 'claude.exe') { delete owned[id]; changed = true; continue }
     const s = sessions.find(x => x.sessionId === id)
-    if (!s || id === me || s.isArchived || s.isRunning || parents.has(id) || !idle(s, now, cfg.idleMs)) continue
+    if (!s || id === me || s.isArchived || parents.has(id) || !quiet(s, now, cfg)) continue
     const members = snap.tree(root).filter(r => !SPARED_IN_SESSION.has(r.name.toLowerCase()))
     kill.push(...members)
     delete owned[id]
@@ -169,6 +172,29 @@ async function releaseIdle($: Engine, now: number, cfg: Cfg, sessions: Session[]
   if (!kill.length) return
   const res = await procs($, ['-Kill', kill.map(key).join(',')])
   log($, `released ${kill.map(r => `${r.name}(${r.pid})`).join(' ')}: ${res.stdout.slice(0, 300)}`)
+}
+
+// list_sessions leaves out the caller, so the app leader judges itself by get_session. Once idle it hands the
+// lead on and stops its own tree, its claude.exe last; the next active session of the app leads.
+async function releaseSelf($: Engine, now: number, cfg: Cfg, sessions: Session[], me: Me) {
+  if (me.act.busy || !me.proc || !me.app || !me.sessionId) return
+  if (sessions.some(s => s.isRunning && s.startedBy === me.sessionId)) return
+  const got = text(await $.mcp.call(SERVER, 'get_session', { session_id: 'self' }))
+  if (!got) return
+  const s = JSON.parse(got) as Session
+  if (s.isArchived || !quiet(s, now, cfg)) return
+  const snap = await snapshot($)
+  const root = snap?.rows.find(r => key(r) === key(me.proc!))
+  if (!snap || !root) return
+  const apps = ((await $.store.get('apps')) ?? {}) as Record<string, unknown>
+  delete apps[me.app]
+  await $.store.set('apps', apps)
+  const owned = ((await $.store.get('owned')) ?? {}) as Owned
+  delete owned[me.sessionId]
+  await $.store.set('owned', owned)
+  const members = snap.tree(root).slice(1).filter(r => !SPARED_IN_SESSION.has(r.name.toLowerCase()))
+  await log($, `release self ${s.title ?? me.sessionId}: ${members.length + 1} processes`)
+  await procs($, ['-Kill', [...members, root].map(key).join(',')])
 }
 
 // Stops the whole tree of each VS Code or CLI session idle past the limit, its claude.exe included:
@@ -232,6 +258,7 @@ async function tick($: Engine, cfg: Cfg, me: Me) {
     const sessions = await listSessions($)
     if (cfg.archiveMs) try { await archiveIdle($, now, cfg, sessions) } catch (err) { log($, `archive failed: ${String(err).slice(0, 200)}`) }
     try { await releaseIdle($, now, cfg, sessions, me.sessionId) } catch (err) { log($, `release failed: ${String(err).slice(0, 200)}`) }
+    try { await releaseSelf($, now, cfg, sessions, me) } catch (err) { log($, `self release failed: ${String(err).slice(0, 200)}`) }
   }
   if (!(await isLeader($, now, cfg, !!me.sessionId))) return
   const snap = await snapshot($)
@@ -247,7 +274,8 @@ export const register: Register = (on, options) => {
   const orphanMs = num(options.orphanMinutes, 60) * MIN
   const cpuIdle = num(options.cpuIdleMs, 1000) * 10_000
   const intervalMs = num(options.intervalMinutes, 5) * MIN
-  const cfg: Cfg = { idleMs, archiveMs, orphanMs, cpuIdle, intervalMs }
+  const stuckMs = (typeof options.stuckMinutes === 'number' && options.stuckMinutes >= 0 ? options.stuckMinutes : 720) * MIN
+  const cfg: Cfg = { idleMs, archiveMs, orphanMs, cpuIdle, intervalMs, stuckMs }
   const me: Me = { act: { at: 0, busy: false, hold: false } }
 
   on('session.start', async ($, e, next) => {
