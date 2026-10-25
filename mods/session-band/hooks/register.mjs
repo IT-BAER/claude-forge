@@ -46,7 +46,7 @@ const S = {
   rateLimits: [],
 }
 
-const settings = { bigTokens: 150000, guard: true, ttlMin: 0, alerts: false, keepWarmHours: 4 }
+const settings = { bigTokens: 150000, guard: true, ttlMin: 0, alerts: false, toasts: true, keepWarmHours: 4 }
 const names = { cache: 'cache', keepwarm: 'keepwarm', board: 'board', handoff: 'handoff' }
 
 let now = 0
@@ -58,7 +58,7 @@ let mask = (s) => s
 let fleet = [] // heartbeats of every session, this one included
 const alerted = new Map() // sessionId -> state or warning key already announced
 let paneOpen = false
-let justCompacted = false
+let lastStepTotal = 0 // the previous main-loop request's input; a drop below 60 % is a compaction or /clear
 let modelLimits = [] // per-model weekly windows (Fable, ...) from the usage endpoint
 let usageAskedAt = -Infinity
 let handoffPending = false
@@ -95,6 +95,12 @@ let auto = false
 const AUTO_GRACE = 3000 // after the turn end: turn.complete is still taking the handoff file
 const AUTO_PROMPT = 'Autonomous mode is on: nobody is at the keyboard. Do not ask the user or wait for approval, "proceed" or "go". Where you would ask or offer a choice, decide with your own recommendation and continue.'
 const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recommended option for each question and continue.'
+// Per-prompt context: the built-in cc-plugin-sec-default skips prompt.compose for installed mods
+const withAuto = (e) => (auto ? { ...e, context: [...(e.context ?? []), AUTO_PROMPT] } : e)
+// Every band toast; /cache toasts off mutes them all, errors included (the band still shows the state)
+function toast($, text, opts) {
+  if (settings.toasts) $.ui.toast(text, opts)
+}
 // Loop stop: the third ready handoff within 15 minutes turns A off instead of continuing
 const AUTO_LOOP = 3
 const AUTO_LOOP_MS = 15 * 60000
@@ -108,7 +114,7 @@ const bgShells = new Map() // task id -> started at
 async function setAuto($, on, why) {
   auto = on
   autoRuns = []
-  if (why) $.ui.toast(why, { timeoutMs: 10000 })
+  if (why) toast($, why, { timeoutMs: 10000 })
   $.ui.invalidate('ui.render')
   await heartbeat($, true)
 }
@@ -219,7 +225,7 @@ async function captureHandoffFile($, path = H.file, early = false) {
       $.ui.invalidate('ui.render')
       return true
     }
-    if (H.announce) $.ui.toast(`Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    if (H.announce) toast($, `Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
     H.announce = false
     const askAfter = H.askAfter
     H.armed = false
@@ -269,7 +275,7 @@ async function captureHandoff($, e) {
     H.askAfter = askAfter
     if (await captureHandoffFile($, H.lastFile)) return
     H.askAfter = false
-    $.ui.toast('The handoff turn ended without a handoff, so nothing was saved.', { timeoutMs: 8000 })
+    toast($, 'The handoff turn ended without a handoff, so nothing was saved.', { timeoutMs: 8000 })
     return
   }
   H.text = body
@@ -279,7 +285,7 @@ async function captureHandoff($, e) {
     H.path = ''
   }
   const saved = H.path ? `Handoff saved to ${H.path}.` : 'Handoff captured (the backup file could not be written).'
-  $.ui.toast(`${saved} Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+  toast($, `${saved} Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
   // Off the hook: the turn is ending, and a dialog would hold it open
   if (askAfter) $.clock.after(300, () => offerContinue($).catch(() => {}))
 }
@@ -304,14 +310,15 @@ function continuationPrompt() {
 async function clearAndContinue($) {
   if (H.continuing) return
   if (!H.text) {
-    $.ui.toast(`No handoff ready. Press h on the band or type /${names.handoff} first.`, { timeoutMs: 8000 })
+    toast($, `No handoff ready. Press h on the band or type /${names.handoff} first.`, { timeoutMs: 8000 })
     return
   }
   if (S.working) {
-    $.ui.toast('Claude is still working. Clear and continue once this turn ends.', { timeoutMs: 8000 })
+    toast($, 'Claude is still working. Clear and continue once this turn ends.', { timeoutMs: 8000 })
     return
   }
-  const text = continuationPrompt()
+  // our own submit skips our prompt.submit hook, so the A text rides in the prompt
+  const text = auto ? `${continuationPrompt()}\n\n${AUTO_PROMPT}` : continuationPrompt()
   const path = H.path
   H.continuing = true
   $.ui.invalidate('ui.render')
@@ -320,7 +327,7 @@ async function clearAndContinue($) {
   } catch (err) {
     H.continuing = false
     $.ui.invalidate('ui.render')
-    $.ui.toast('Could not run /clear: ' + clip(String((err && err.message) || err), 100) + (path ? ` The handoff is saved at ${path}.` : ''), { timeoutMs: 10000 })
+    toast($, 'Could not run /clear: ' + clip(String((err && err.message) || err), 100) + (path ? ` The handoff is saved at ${path}.` : ''), { timeoutMs: 10000 })
     return
   }
   H.text = ''
@@ -338,7 +345,7 @@ async function clearAndContinue($) {
     } catch {
       filled = false
     }
-    $.ui.toast(filled ? 'Cleared. The handoff is in the prompt box: press Enter to send it.' : `Cleared, but the handoff could not be sent.${path ? ` It's saved at ${path}.` : ''}`, { timeoutMs: 10000 })
+    toast($, filled ? 'Cleared. The handoff is in the prompt box: press Enter to send it.' : `Cleared, but the handoff could not be sent.${path ? ` It's saved at ${path}.` : ''}`, { timeoutMs: 10000 })
   } finally {
     H.continuing = false
     $.ui.invalidate('ui.render')
@@ -349,7 +356,7 @@ async function clearAndContinue($) {
 // until Claude finishes the current turn.
 async function runHandoff($) {
   if (handoffPending) {
-    $.ui.toast('Session handoff is already queued.')
+    toast($, 'Session handoff is already queued.')
     return
   }
   try {
@@ -357,18 +364,18 @@ async function runHandoff($) {
     const cmd = commands.find((c) => c.name === 'session-handoff') || commands.find((c) => HANDOFF_SKILL.test(c.name))
     if (!cmd) {
       H.askAfter = false
-      $.ui.toast('No /session-handoff skill in this session.', { timeoutMs: 8000 })
+      toast($, 'No /session-handoff skill in this session.', { timeoutMs: 8000 })
       return
     }
     handoffPending = true
     armHandoff(false)
     $.ui.invalidate('ui.render')
-    $.ui.toast(S.working ? 'Session handoff queued: it runs when Claude finishes this turn.' : 'Running /session-handoff.')
+    toast($, S.working ? 'Session handoff queued: it runs when Claude finishes this turn.' : 'Running /session-handoff.')
     await $.command.run({ command: cmd.name, args: '' })
   } catch (err) {
     H.armed = false
     H.askAfter = false
-    $.ui.toast('Could not start /session-handoff: ' + clip(String((err && err.message) || err), 100), { timeoutMs: 8000 })
+    toast($, 'Could not start /session-handoff: ' + clip(String((err && err.message) || err), 100), { timeoutMs: 8000 })
   } finally {
     handoffPending = false
     $.ui.invalidate('ui.render')
@@ -732,13 +739,13 @@ async function applyRemoteCommands($) {
 function startKeepWarm($, hours) {
   S.keepWarm = true
   S.keepWarmUntil = now + hours * 60 * MIN
-  $.ui.toast(`Keeping this cache warm until ${clock(S.keepWarmUntil)}. A ping reads the cache before it expires.`)
+  toast($, `Keeping this cache warm until ${clock(S.keepWarmUntil)}. A ping reads the cache before it expires.`)
 }
 
 function stopKeepWarm($, why) {
   if (!S.keepWarm) return
   S.keepWarm = false
-  $.ui.toast(`Keep warm off (${why}). ${S.pings} ping(s), ${money(S.pingUsd)}.`, { timeoutMs: 8000 })
+  toast($, `Keep warm off (${why}). ${S.pings} ping(s), ${money(S.pingUsd)}.`, { timeoutMs: 8000 })
 }
 
 async function keepWarmStep($) {
@@ -780,7 +787,7 @@ function warnStep($) {
     const cost = money(rewriteCost(hb.ctx, hb.model, hb.ttlMin))
     const who = hb.self ? 'This session' : `"${mask(hb.label)}"`
     const how = hb.self ? `type /${names.keepwarm} or press 1` : `open /${names.board} to keep it warm`
-    $.ui.toast(`${who}: ${tokens(hb.ctx)}-token cache goes cold in ${minutes(st.left)}. Rewriting it costs about ${cost}. ${how}.`, { timeoutMs: 15000 })
+    toast($, `${who}: ${tokens(hb.ctx)}-token cache goes cold in ${minutes(st.left)}. Rewriting it costs about ${cost}. ${how}.`, { timeoutMs: 15000 })
   }
   // Another session started waiting on a permission or a question
   for (const hb of fleet) {
@@ -788,7 +795,7 @@ function warnStep($) {
     const prev = alerted.get('state:' + hb.id)
     alerted.set('state:' + hb.id, hb.state)
     if (hb.state === 'waiting' && prev && prev !== 'waiting') {
-      $.ui.toast(`"${mask(hb.label)}" is waiting on you${hb.waitingFor ? ': ' + hb.waitingFor : ''}`, { timeoutMs: 10000 })
+      toast($, `"${mask(hb.label)}" is waiting on you${hb.waitingFor ? ': ' + hb.waitingFor : ''}`, { timeoutMs: 10000 })
     }
   }
 }
@@ -820,8 +827,8 @@ function statusText() {
   if (S.keepWarm) lines.push(`Keep warm is on until ${clock(S.keepWarmUntil)}: ${S.pings} ping(s), ${money(S.pingUsd)} so far.`)
   if (allLimits().length) lines.push(`Plan limits used: ${limitsText(allLimits())}.`)
   lines.push(`Session cost so far: ${money(S.costUsd)}. Cold restarts this session: ${S.coldRestarts.length} (${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}).`)
-  lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}.`)
-  lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts [on|off] (no value toggles). Board: /${names.board}.`)
+  lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}. Toasts: ${settings.toasts ? 'on' : 'off'}.`)
+  lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts [on|off], /${names.cache} toasts [on|off] (no value toggles). Board: /${names.board}.`)
   return lines.join('\n')
 }
 
@@ -842,7 +849,7 @@ export function register(on) {
     S.model = await $.session.model()
     await loadSettings($)
     await readRecording($)
-    names.cache = (await registerCommand($, 'cache', 'Session Band status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]]')) || names.cache
+    names.cache = (await registerCommand($, 'cache', 'Session Band status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]] [toasts [on|off]]')) || names.cache
     names.keepwarm = (await registerCommand($, 'keepwarm', 'Keep this session\'s prompt cache warm (default 4 hours), or /keepwarm off', '[hours|off]', true)) || names.keepwarm
     names.board = (await registerCommand($, 'board', 'Every local Claude Code session: state, context, cache, cost', '', true)) || names.board
     names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
@@ -887,7 +894,7 @@ export function register(on) {
     const left = msLeft(S.lastActivity, ttl)
     const isCold = left !== null && left <= 0
     const fromUser = e.origin && (e.origin.kind === 'composer' || e.origin.kind === 'bridge')
-    if (!settings.guard || !fromUser || !isCold || S.ctx < settings.bigTokens || e.turnId) return next(e)
+    if (!settings.guard || !fromUser || !isCold || S.ctx < settings.bigTokens || e.turnId) return next(withAuto(e))
     const cost = money(rewriteCost(S.ctx, S.model, ttl))
     let answer = 'Send anyway'
     try {
@@ -897,7 +904,7 @@ export function register(on) {
       )
     } catch {
       // nobody to ask (a -p run, or the dialog was dismissed): send as typed
-      return next(e)
+      return next(withAuto(e))
     }
     if (answer === 'Compact first, then send') {
       try {
@@ -905,10 +912,10 @@ export function register(on) {
       } catch {
         // compaction refused or failed: send anyway
       }
-      return next(e)
+      return next(withAuto(e))
     }
-    if (answer === 'Send anyway') return next(e)
-    $.ui.toast('Not sent. A fresh session with a short handoff avoids the rewrite entirely.', { timeoutMs: 8000 })
+    if (answer === 'Send anyway') return next(withAuto(e))
+    toast($, 'Not sent. A fresh session with a short handoff avoids the rewrite entirely.', { timeoutMs: 8000 })
     return { drop: 'Cancelled by session-band before a cold cache rewrite' }
   })
 
@@ -932,10 +939,10 @@ export function register(on) {
     const written = u.cache_creation_input_tokens || 0
     const gap = S.lastActivity ? startedAt - S.lastActivity : 0
     S.model = u.model || S.model
-    const afterCompact = justCompacted
-    justCompacted = false
+    const afterCompact = total < 0.6 * lastStepTotal
+    lastStepTotal = total
     if (afterCompact) {
-      // the first request after a compaction writes the new, shorter context: expected
+      // the first request after a compaction or /clear writes the new, shorter context: expected
     } else if (S.lastActivity && total > 30000 && written / total > 0.5) {
       // A rewrite after 5-60 idle minutes means this session runs on the 5-minute TTL
       if (!settings.ttlMin && gap > 5.5 * MIN && gap < S.ttlMin * MIN) {
@@ -989,18 +996,6 @@ export function register(on) {
     if (auto && H.text) $.clock.after(AUTO_GRACE, () => outsideStep($).catch(() => {}))
     refreshModelLimits($).catch(() => {})
     $.ui.invalidate('ui.render')
-    return r
-  })
-
-  on('prompt.compose', async ($, e, next) => {
-    const r = await next(e)
-    if (!auto || !r || !Array.isArray(r.sections)) return r
-    return { ...r, sections: [...r.sections, { id: 'session-band:auto', text: AUTO_PROMPT, scope: 'session' }] }
-  })
-
-  on('session.compact', async ($, e, next) => {
-    const r = await next(e)
-    justCompacted = true
     return r
   })
 
@@ -1076,7 +1071,7 @@ export function register(on) {
     const [key, value] = String(e.args || '').trim().toLowerCase().split(/\s+/)
     if (key === 'ttl') {
       settings.ttlMin = value === '5' ? 5 : value === '60' ? 60 : 0
-    } else if (key === 'guard' || key === 'alerts') {
+    } else if (key === 'guard' || key === 'alerts' || key === 'toasts') {
       // no value toggles
       settings[key] = value === undefined ? !settings[key] : value !== 'off'
     } else if (key === 'big') {
@@ -1289,7 +1284,7 @@ function drawBoard($, e) {
               await heartbeat($, true)
             } else {
               await $.store.set('cmd:' + hb.id, { keepWarm: !hb.keepWarm, at: now })
-              $.ui.toast(`Sent to "${mask(hb.label)}". It applies within 30 seconds.`)
+              toast($, `Sent to "${mask(hb.label)}". It applies within 30 seconds.`)
             }
             await readFleet($)
             $.ui.invalidate('ui.render')

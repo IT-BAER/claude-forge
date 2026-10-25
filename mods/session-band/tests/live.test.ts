@@ -488,16 +488,37 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
   }
 })
 
+test('a request after a compaction or /clear that writes the shorter context is no cold restart', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  const usage = { value: { model: 'claude-opus-5-5', input_tokens: 1000, output_tokens: 10, cache_read_input_tokens: 199000, cache_creation_input_tokens: 0 } }
+  const { clock, live } = await start($, on, (on) => {
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('turn.step', async function* (_: any, e: any) {
+      return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: usage.value }
+    })
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  const step = async (i: number) => {
+    const s = $.turn.step({ turnId: 't1', index: i, model: 'claude-opus-5-5', messageCount: 1 } as any)
+    for await (const _ of s) { /* drain */ }
+    await s.result
+  }
+  await step(0)
+  await clock.advance(10 * 60000)
+  usage.value = { ...usage.value, cache_read_input_tokens: 0, cache_creation_input_tokens: 79000 }
+  await step(1)
+  await clock.advance(31000)
+  expect(live().coldCount).toBe(0)
+  expect(live().ttlMin).toBe(60)
+})
+
 // Autonomous mode: the band's A toggle
-const COMPOSE = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
 async function startAuto($: any, on: any) {
   const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
   const submitted: string[] = []
   const shell = { value: { result: {}, text: '' } as any }
   const ctx = await start($, on, (on) => {
     on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
-    on('prompt.submit', (_: any, e: any) => { submitted.push(e.text); return { text: e.text } })
-    on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' }] }))
+    on('prompt.submit', (_: any, e: any) => { submitted.push(e.text); return { text: e.text, context: e.context } })
     on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
     on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
     on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); if (e.tool === 'Bash') return shell.value; return { result: { text: '' } } })
@@ -544,6 +565,8 @@ for (const on_ of [true, false]) {
     await clock.advance(4000)
     expect(ran.includes('clear')).toBe(on_)
     expect(submitted.some((t) => t.startsWith(`Continue from session handoff: read ${HF}`))).toBe(on_)
+    // the continuation skips this mod's own prompt.submit hook, so its text carries the A instruction
+    if (on_) expect(submitted.find((t) => t.startsWith('Continue from session handoff:'))).toMatch(/do not re-explore\.\n\nAutonomous mode is on: nobody is at the keyboard\./)
   })
 }
 
@@ -641,18 +664,30 @@ test('with A on, clear and continue waits for running background agents', async 
   expect(ran).toContain('clear')
 })
 
-test('with A on, the system prompt says nobody is at the keyboard and questions go back to Claude', async ($, on) => {
+test('with A on, each prompt tells Claude nobody is at the keyboard and questions go back to Claude', async ($, on) => {
   const { toggle } = await startAuto($, on)
   const ask = { tool: 'AskUserQuestion', input: { questions: [] } } as any
-  expect((await $.prompt.compose(COMPOSE)).sections.map((s: any) => s.id)).toEqual(['intro'])
+  const context = async () => ((await $.prompt.submit({ text: 'next', origin: { kind: 'composer' } } as any)) as any).context ?? []
+  expect(await context()).toEqual([])
   expect((await $.tool.call(ask) as any).deny).toBeUndefined()
   await toggle()
-  const sections = (await $.prompt.compose(COMPOSE)).sections
-  expect(sections.map((s: any) => [s.id, s.scope])).toEqual([['intro', 'shared'], ['session-band:auto', 'session']])
-  expect(sections[1].text).toMatch(/nobody is at the keyboard/)
+  const ctx = await context()
+  expect(ctx.length).toBe(1)
+  expect(ctx[0]).toMatch(/nobody is at the keyboard/)
   expect((await $.tool.call(ask) as any).deny).toMatch(/recommended option/)
   await toggle()
-  expect((await $.prompt.compose(COMPOSE)).sections.map((s: any) => s.id)).toEqual(['intro'])
+  expect(await context()).toEqual([])
+})
+
+test('/cache toasts off mutes the band\'s toasts, and /cache toasts on brings them back', async ($, on) => {
+  const { toggle, toasts } = await startAuto($, on)
+  expect(((await $.command.run({ command: 'cache', args: 'toasts off' } as any)) as any).text).toMatch(/Toasts: off/)
+  const before = toasts.length
+  await toggle()
+  expect(toasts.length).toBe(before)
+  await $.command.run({ command: 'cache', args: 'toasts on' } as any)
+  await toggle()
+  expect(toasts.slice(before)).toEqual(['Autonomous mode off.'])
 })
 
 test('the A button is highlighted while on and explains itself on hover', async ($, on) => {

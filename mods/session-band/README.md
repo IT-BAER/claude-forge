@@ -50,8 +50,9 @@ Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band.
 - `/board` shows every local chat in one pane: waiting on you first, then working, then the ones whose cache cools soonest.
 - `/handoff` (or the `handoff` button) runs the bundled `session-handoff` skill, then clears the chat and starts the fresh one from the handoff.
 - The `A` button at the right end of the band toggles [autonomous mode](#autonomous-mode-a): handoffs are cleared and continued without you.
-- `/cache` shows status and settings: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`.
+- `/cache` shows status and settings: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`, `toasts [on|off]`.
 - Alerts are off by default. They are the unasked toasts: a big cache about to go cold, and another chat waiting on you. `/cache alerts` toggles them.
+- Toasts are on by default. `/cache toasts off` mutes every toast of the band, errors included; the band and footer still show the state. `/cache toasts` toggles them.
 
 ## Autonomous mode (A)
 
@@ -67,7 +68,7 @@ A lasts for the current Claude Code process only. It is not saved, so a restart 
 
 ### What changes while A is on
 
-- Claude gets one more system prompt section: nobody is at the keyboard, do not ask or wait for "proceed" or "go", decide with your own recommendation and continue. Turning A on or off changes the system prompt, so the next send rewrites the cache once.
+- Each prompt carries one more hidden context block: nobody is at the keyboard, do not ask or wait for "proceed" or "go", decide with your own recommendation and continue. The continuation prompt after a clear ends with the same text. It is not a system prompt section, because the built-in `cc-plugin-sec-default` skips `prompt.compose` for installed mods; a turn that starts without a prompt (a task notification) does not get it.
 - Every `AskUserQuestion` is refused. The refusal tells Claude to pick its recommended option and continue.
 - After a handoff turn, the band does not ask "Clear and continue?". It does that by itself.
 
