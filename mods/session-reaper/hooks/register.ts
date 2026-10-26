@@ -63,8 +63,7 @@ async function isAppLeader($: Engine, now: number, cfg: Cfg, app: string) {
 
 // A session without the app's session tools (VS Code, CLI) keeps its own activity record under
 // `cli:<its claude.exe>`, one store key per session so concurrent writers never overwrite each other.
-// hold: background tasks or scheduled wakeups that will wake the session later.
-type Activity = { at: number; busy: boolean; hold: boolean }
+type Activity = { at: number; busy: boolean }
 type Me = { proc?: Proc; app?: string; sessionId?: string; act: Activity; saved?: string }
 const CLI = 'cli:'
 
@@ -207,7 +206,7 @@ async function releaseCli($: Engine, now: number, cfg: Cfg, snap: Snap, mine: Pr
     const root = live.get(id)
     if (!root || root.name.toLowerCase() !== 'claude.exe') { await $.store.delete(k); continue }
     const a = (await $.store.get(k)) as Activity | undefined
-    if (!a || a.busy || a.hold || (mine && id === key(mine)) || now - a.at < cfg.idleMs) continue
+    if (!a || a.busy || (mine && id === key(mine)) || now - a.at < cfg.idleMs) continue
     const members = snap.tree(root).filter(r => !SPARED_IN_SESSION.has(r.name.toLowerCase()))
     kill.push(...members)
     await $.store.delete(k)
@@ -276,7 +275,7 @@ export const register: Register = (on, options) => {
   const intervalMs = num(options.intervalMinutes, 5) * MIN
   const stuckMs = (typeof options.stuckMinutes === 'number' && options.stuckMinutes >= 0 ? options.stuckMinutes : 720) * MIN
   const cfg: Cfg = { idleMs, archiveMs, orphanMs, cpuIdle, intervalMs, stuckMs }
-  const me: Me = { act: { at: 0, busy: false, hold: false } }
+  const me: Me = { act: { at: 0, busy: false } }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -285,7 +284,7 @@ export const register: Register = (on, options) => {
     $.clock.every(intervalMs, () => void tick($, cfg, me))
     return started
   })
-  // Main loop only: a subagent's run happens inside a main turn or is a background task Stop reports.
+  // Main loop only: a subagent's run happens inside a main turn or is a background task.
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) await note($, me, { busy: true })
     return next(e)
@@ -294,9 +293,5 @@ export const register: Register = (on, options) => {
     const done = await next(e)
     if (e.agentId === undefined) await note($, me, { busy: false })
     return done
-  })
-  on('classic.Stop', async ($, e, next) => {
-    await note($, me, { hold: !!(e.background_tasks?.length || e.session_crons?.length) })
-    return next(e)
   })
 }

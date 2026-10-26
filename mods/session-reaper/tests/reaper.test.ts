@@ -38,7 +38,6 @@ async function start($: any, on: any, w: World) {
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
   on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
-  on('classic.Stop', () => ({}))
   on('ui.log', () => ({ value: undefined }))
   on('mcp.call', (_: any, e: any) => {
     const reply = (text: string) => ({ value: { isError: false, content: [{ type: 'text', text }] } })
@@ -61,18 +60,17 @@ async function start($: any, on: any, w: World) {
 
 // The activity record a VS Code or CLI session keeps under its own claude.exe.
 const cli = (r: Row) => `cli:${r.pid}:${r.created}`
-const active = (idleMin: number, extra: Record<string, unknown> = {}) => ({ at: NOW - idleMin * MIN, busy: false, hold: false, ...extra })
+const active = (idleMin: number, extra: Record<string, unknown> = {}) => ({ at: NOW - idleMin * MIN, busy: false, ...extra })
 
-test('releases a VS Code or CLI session idle past idleMinutes, its claude.exe included; keeps busy, held and recent ones', async ($, on) => {
+test('releases a VS Code or CLI session idle past idleMinutes, its claude.exe included; keeps busy and recent ones', async ($, on) => {
   const procs = [
     row(10, 5, 'claude.exe', 120), row(11, 10, 'node.exe', 120), row(12, 11, 'chrome.exe', 120), row(13, 10, 'claude.exe', 120),
     row(20, 5, 'claude.exe', 120), row(21, 20, 'node.exe', 120),
     row(30, 5, 'claude.exe', 120), row(31, 30, 'node.exe', 120),
-    row(40, 5, 'claude.exe', 120), row(41, 40, 'node.exe', 120),
   ]
   const w: World = {
     desk: false, app: null, procs,
-    store: { [cli(procs[0])]: active(90), [cli(procs[4])]: active(30), [cli(procs[6])]: active(90, { busy: true }), [cli(procs[8])]: active(90, { hold: true }) },
+    store: { [cli(procs[0])]: active(90), [cli(procs[4])]: active(30), [cli(procs[6])]: active(90, { busy: true }) },
   }
   const { clock, pids, store } = await start($, on, w)
   await clock.advance(TICK)
@@ -102,30 +100,18 @@ test('forgets the record of a VS Code or CLI session whose claude.exe ended or w
   expect(Object.keys(store).filter(k => k.startsWith('cli:'))).toEqual([cli(self)])
 })
 
-test('a VS Code or CLI session records its activity: busy during a turn, held by background work or a wakeup', async ($, on) => {
+test('a VS Code or CLI session records its activity: busy during a turn', async ($, on) => {
   const self = row(50, 5, 'claude.exe', 10)
   const w: World = { desk: false, app: null, self, procs: [self] }
   const { clock, store } = await start($, on, w)
   await clock.advance(TICK)
-  expect(store[cli(self)]).toEqual({ at: NOW, busy: false, hold: false })
+  expect(store[cli(self)]).toEqual({ at: NOW, busy: false })
 
   await clock.advance(TICK)
   await $.turn.start({ text: 'hi', turnId: 't1' })
-  expect(store[cli(self)]).toEqual({ at: NOW + 2 * TICK, busy: true, hold: false })
-  await $.classic.Stop({ stop_hook_active: false, background_tasks: [{ id: 'b1', type: 'shell', status: 'running', description: 'dev server' }], session_crons: [] })
+  expect(store[cli(self)]).toEqual({ at: NOW + 2 * TICK, busy: true })
   await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
-  expect(store[cli(self)]).toEqual({ at: NOW + 2 * TICK, busy: false, hold: true })
-
-  await clock.advance(TICK)
-  await $.turn.start({ text: '', turnId: 't2' })
-  await $.classic.Stop({ stop_hook_active: false, background_tasks: [], session_crons: [{ id: 'c1', schedule: '0 * * * *', recurring: true, prompt: 'check' }] })
-  await $.turn.complete({ turnId: 't2', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
-  expect(store[cli(self)]).toEqual({ at: NOW + 3 * TICK, busy: false, hold: true })
-
-  await $.turn.start({ text: '', turnId: 't3' })
-  await $.classic.Stop({ stop_hook_active: false, background_tasks: [], session_crons: [] })
-  await $.turn.complete({ turnId: 't3', answer: '', durationMs: 1, isAborted: false, reason: 'answer' })
-  expect(store[cli(self)]).toEqual({ at: NOW + 3 * TICK, busy: false, hold: false })
+  expect(store[cli(self)]).toEqual({ at: NOW + 2 * TICK, busy: false })
 })
 
 test('a subagent turn does not change the activity record', async ($, on) => {
@@ -133,7 +119,7 @@ test('a subagent turn does not change the activity record', async ($, on) => {
   const { clock, store } = await start($, on, { desk: false, app: null, self, procs: [self] })
   await clock.advance(TICK)
   await $.turn.start({ text: 'task', turnId: 'a1', agentId: 'agent-1' })
-  expect(store[cli(self)]).toEqual({ at: NOW, busy: false, hold: false })
+  expect(store[cli(self)]).toEqual({ at: NOW, busy: false })
 })
 
 test('a VS Code or CLI session never releases itself', async ($, on) => {
