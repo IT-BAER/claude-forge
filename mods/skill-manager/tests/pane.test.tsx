@@ -27,6 +27,19 @@ test('groups skills by scope, plugin skills under their plugin', async ($, on) =
   }
 })
 
+test('list rows are spaced by one small equal gap', async ($, on) => {
+  world(on)
+  await start($)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const list = await ui.find({ key: 'list' })
+
+  // This engine build refuses step names (xs) for gap; a quarter cell keeps the gap small.
+  expect(list?.props.gap).toBe(0.25)
+  expect((await ui.findAll({ type: 'Box' })).filter(box => /^row:/.test(String(box.key))).every(box => box.props.marginTop === undefined)).toBe(true)
+  await ui.unmount()
+})
+
 test('a narrow pane cuts long names so a row stays one line', async ($, on) => {
   const long = 'a-very-long-skill-name-that-does-not-fit-the-pane'
   const files = {

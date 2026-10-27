@@ -423,7 +423,7 @@ export const register: Register = on => {
           )}
         </Box>
         {status}
-        <Box flexDirection="column">
+        <Box key="list" flexDirection="column" gap={0.25}>
           <Box key="columns" flexDirection="row" gap={1}>
             <Box flexGrow={1}>{header('name', 'Name')}</Box>
             {cell(USES_WIDTH, header('uses', 'Uses'))}
