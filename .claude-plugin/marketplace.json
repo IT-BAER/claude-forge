@@ -24,6 +24,11 @@
       "name": "session-reaper",
       "source": "./mods/session-reaper",
       "description": "Frees the memory of idle Claude desktop sessions by stopping their process trees (sessions stay in the sidebar), optionally archives them, and stops idle process trees left behind by ended sessions (Windows)"
+    },
+    {
+      "name": "skill-manager",
+      "source": "./mods/skill-manager",
+      "description": "Side pane listing installed skills with scope, GitHub source, usage, update and delete; /skill-manager"
     }
   ]
 }

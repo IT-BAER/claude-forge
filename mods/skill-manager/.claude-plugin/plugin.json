@@ -1,0 +1,8 @@
+{
+  "name": "skill-manager",
+  "description": "Side pane listing installed skills with scope, GitHub source, usage, update and delete; /skill-manager",
+  "author": {
+    "name": "IT-BAER"
+  },
+  "types": "./types/index.d.ts"
+}
