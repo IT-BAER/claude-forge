@@ -72,8 +72,8 @@ declare module 'claude-code' {
       updates: Record<string, UpdateInfo>
       view: PaneView
       busy: string | null
-      /** Row id whose action runs now; its button shows a busy text instead. */
-      busyRow: string | null
+      /** Row ids whose update runs now; their buttons show a busy text instead. */
+      busyRows: string[]
       message: string | null
       /** The session's working directory, where project skills are read. */
       cwd: string | null    }

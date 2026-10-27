@@ -65,7 +65,7 @@ export const baseFiles = (): Record<string, string | null> => ({
   [`${PLUGIN_DIR}\\skills\\delta\\SKILL.md`]: skill('delta', 'Plugin skill'),
 })
 
-export type Ran = { argv: readonly string[]; cwd?: string }
+export type Ran = { argv: readonly string[]; cwd?: string; env?: Record<string, string>; timeoutMs?: number }
 
 /**
  * Answers fs, env, store, process and http beneath the plugin from memory.
@@ -73,10 +73,11 @@ export type Ran = { argv: readonly string[]; cwd?: string }
  */
 export const world = (
   on: On,
-  { files = baseFiles(), http = {}, stdout = () => '{}' }: {
+  { files = baseFiles(), http = {}, stdout = () => '{}', exit = () => 0 }: {
     files?: Record<string, string | null>
     http?: Record<string, unknown>
     stdout?: (argv: readonly string[]) => string | Promise<string>
+    exit?: (argv: readonly string[]) => number
   } = {},
 ) => {
   const ran: Ran[] = []
@@ -114,9 +115,17 @@ export const world = (
   })
   on('fs.exists', (_, e) => ({ value: e.path in files }))
   on('process.run', async (_, e) => {
-    ran.push({ argv: e.argv, cwd: e.init?.cwd })
+    ran.push({ argv: e.argv, cwd: e.init?.cwd, env: e.init?.env, timeoutMs: e.init?.timeoutMs })
 
-    return { value: { exitCode: 0, stdout: await stdout(e.argv), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    let out: string
+    try {
+      out = await stdout(e.argv)
+    } catch (error) {
+      // A rejected stdout stands for a run that never finished, such as a timeout.
+      return { deny: error instanceof Error ? error.message : String(error) }
+    }
+
+    return { value: { exitCode: exit(e.argv), stdout: out, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('http.fetch', (_, e) => {
     fetched.push(e.url)

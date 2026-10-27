@@ -130,28 +130,67 @@ export const githubLocation = (repo: string, skillPath: string) => {
   return { repo, parent: parts.join('/'), leaf }
 }
 
-/** The argv and cwd that update a skill from where it came from, or a reason it cannot. */
-export const updateCommand = (
-  row: SkillRow,
-  paths: Paths,
-  cwd: string | null,
-): { argv: string[]; cwd?: string } | { reason: string } => {
-  const source = row.source
-  if (source?.kind === 'plugin') {
-    const id = source.marketplace ? `${source.plugin}@${source.marketplace}` : source.plugin
-    if (!isSafeName(source.plugin) || (source.marketplace && !isSafeName(source.marketplace)))
-      return { reason: `unexpected plugin id ${id}` }
+/** Set on every update run: a vanished or private repo fails at once instead of waiting for a git login. */
+export const UPDATE_ENV: Record<string, string> = {
+  GIT_TERMINAL_PROMPT: '0',
+  GCM_INTERACTIVE: 'never',
+  SKILLS_CLONE_TIMEOUT_MS: '60000',
+}
 
-    return { argv: ['claude', 'plugin', 'update', id] }
+/** Run limit: 30 s to start npx or claude plus one 60 s clone per source repo; the engine allows 10 minutes at most. */
+export const updateTimeout = (repos: number) => Math.min(600_000, 30_000 + 60_000 * Math.max(1, repos))
+
+export type UpdateBatch = { argv: string[]; cwd?: string; timeoutMs: number; rows: SkillRow[] }
+
+/**
+ * The runs that update `rows`: one skills CLI run per lock file holding all its skills
+ * (the CLI clones each repo once and writes its lock itself), one `claude plugin update`
+ * per plugin. Rows that cannot update come back with a reason.
+ */
+export const updateBatches = (rows: SkillRow[], paths: Paths, cwd: string | null) => {
+  const batches = new Map<string, UpdateBatch>()
+  const skipped: Array<{ row: SkillRow; reason: string }> = []
+  const add = (key: string, row: SkillRow, start: () => UpdateBatch) => {
+    const batch = batches.get(key) ?? start()
+    batch.rows.push(row)
+    batches.set(key, batch)
   }
-  if (source?.kind !== 'github') return { reason: 'no recorded source' }
-  if (!isSafeName(row.folder)) return { reason: `unexpected folder name ${row.folder}` }
-  const where = source.lock === 'global' ? { flag: '-g', cwd: paths.home } : { flag: '-p', cwd: cwd ?? paths.home }
-  const npx = ['npx', '-y', 'skills', 'update', row.folder, where.flag, '-y']
-  // npx is a .cmd shim on Windows: it starts only through cmd.
-  const argv = paths.sep === '\\' ? ['cmd', '/d', '/c', ...npx] : npx
+  for (const row of rows) {
+    const source = row.source
+    if (source?.kind === 'plugin') {
+      const id = source.marketplace ? `${source.plugin}@${source.marketplace}` : source.plugin
+      if (!isSafeName(source.plugin) || (source.marketplace && !isSafeName(source.marketplace)))
+        skipped.push({ row, reason: `unexpected plugin id ${id}` })
+      else add(`plugin:${id}`, row, () => ({ argv: ['claude', 'plugin', 'update', id], timeoutMs: updateTimeout(1), rows: [] }))
+    } else if (source?.kind !== 'github') skipped.push({ row, reason: 'no recorded source' })
+    else if (!isSafeName(row.folder)) skipped.push({ row, reason: `unexpected folder name ${row.folder}` })
+    else add(`lock:${source.lock}`, row, () => ({ argv: [], cwd: source.lock === 'global' ? paths.home : (cwd ?? paths.home), timeoutMs: 0, rows: [] }))
+  }
+  for (const [key, batch] of batches) {
+    if (!key.startsWith('lock:')) continue
+    const npx = ['npx', '-y', 'skills', 'update', ...batch.rows.map(row => row.folder), key === 'lock:global' ? '-g' : '-p', '-y']
+    // npx is a .cmd shim on Windows: it starts only through cmd.
+    batch.argv = paths.sep === '\\' ? ['cmd', '/d', '/c', ...npx] : npx
+    batch.timeoutMs = updateTimeout(new Set(batch.rows.map(row => (row.source?.kind === 'github' ? row.source.repo : ''))).size)
+  }
 
-  return { argv, cwd: where.cwd }
+  return { batches: [...batches.values()], skipped }
+}
+
+/**
+ * The rows a finished run updated. The skills CLI prints `✓ Updated <folder>` per skill in
+ * newer versions only, so with exit 0 and no such line every row counts as updated.
+ */
+export const updatedRows = (rows: SkillRow[], stdout: string, exitCode: number) => {
+  const names = new Set(
+    stdout
+      .split(/\r\n|\r|\n/)
+      .map(line => /^✓\s*Updated (\S+)$/.exec(plainText(line))?.[1])
+      .filter((name): name is string => !!name),
+  )
+  if (exitCode === 0 && names.size === 0) return rows
+
+  return rows.filter(row => names.has(row.folder))
 }
 
 /** Only user and project skill folders directly under a known skills root may be trashed. */
@@ -163,19 +202,31 @@ export const canDelete = (row: SkillRow, paths: Paths, cwd: string | null) => {
 
 /** One GitHub contents call per repo folder that holds skill folders. */
 export const updateChecks = (rows: SkillRow[]) => {
-  const groups = new Map<string, { url: string; rows: Array<{ id: string; leaf: string; hash: string }> }>()
+  const groups = new Map<string, { api: string; url: string; rows: Array<{ id: string; leaf: string; hash: string }> }>()
   for (const row of rows) {
     if (row.source?.kind !== 'github') continue
     const { repo, parent, leaf } = githubLocation(row.source.repo, row.source.skillPath)
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) continue
     const path = parent.split('/').filter(Boolean).map(encodeURIComponent).join('/')
-    const url = `https://api.github.com/repos/${repo}/contents${path ? `/${path}` : ''}`
-    const group = groups.get(url) ?? { url, rows: [] }
+    const api = `repos/${repo}/contents${path ? `/${path}` : ''}`
+    const url = `https://api.github.com/${api}`
+    const group = groups.get(url) ?? { api, url, rows: [] }
     group.rows.push({ id: row.id, leaf, hash: row.source.hash })
     groups.set(url, group)
   }
 
   return [...groups.values()]
+}
+
+/** The entries of a GitHub contents reply, or undefined when it is not a folder listing. */
+export const folderListing = (text: string): Array<{ name: string; sha: string }> | undefined => {
+  try {
+    const json: unknown = JSON.parse(text)
+
+    return Array.isArray(json) ? json : undefined
+  } catch {
+    return undefined
+  }
 }
 
 type Counted = Record<string, { count?: number; last?: string | null }>

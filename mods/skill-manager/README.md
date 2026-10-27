@@ -79,9 +79,13 @@ claude --plugin-dir path/to/claude-forge/mods/skill-manager
 
 ### Updates
 
-- Check updates asks the GitHub contents API, once per repository folder, whether the skill folder changed since install (git tree SHA against the lock file's `skillFolderHash`). Rows with a newer version get an Update button.
+- Check updates first scans the skill folders and lock files again, then asks the GitHub contents API, once per repository folder, whether the skill folder changed since install (git tree SHA against the lock file's `skillFolderHash`). Rows with a newer version get an Update button.
+- When the [GitHub CLI](https://cli.github.com/) is installed and logged in, the check uses `gh api` (5000 calls per hour); otherwise it calls the API without login. The message names checks that failed, for example a rate limit (HTTP 403).
 - Update for a GitHub skill runs `npx -y skills update <folder> -g -y` (`-p` for a project skill). Update for a plugin skill runs `claude plugin update <plugin>@<marketplace>`; restart Claude Code to load it.
 - While an update runs, its row shows "Updating…" and the other Update buttons are disabled.
+- Update all, next to Check updates, updates every skill the check found at once: one `skills update <a> <b> … -y` run per lock file (the CLI clones each repo once) and one `claude plugin update` per plugin, all in parallel. Every pending row shows "Updating…". A failed skill does not stop the rest; the message at the end names the failures and why.
+- Time limits: git login prompts are off (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), so a deleted or private repo fails at once. Each clone may take 60 s (`SKILLS_CLONE_TIMEOUT_MS`), each run 30 s plus 60 s per repo. A run that times out leaves its skills unchanged with their Update buttons.
+- With `-y` the `skills` CLI never removes local skills, also when a skill moved or disappeared upstream; it prints a warning instead.
 
 ### Details and delete
 
@@ -91,7 +95,7 @@ Delete asks a second time, then moves the folder to `.trash/<name>-<timestamp>` 
 
 ## Limits
 
-- GitHub allows 60 unauthenticated API calls per hour. Check updates needs one call per repository folder.
+- Without `gh`, GitHub allows 60 API calls per hour per public IP, shared with everyone behind the same IP. Check updates needs one call per repository folder.
 - Delete does not remove the skill's entry from the `skills` CLI lock file.
 - Project skills are read only from the session's own folder, not from its parent folders.
 - If `~/.codex/skills` or `~/.agents/skills` link to `~/.claude/skills`, Delete and Update affect those tools too.

@@ -91,6 +91,31 @@ test('check updates compares the GitHub tree SHA with the lock hash', async ($, 
   expect(ran.at(-1)?.argv).toContain('beta')
 })
 
+test('check updates asks gh first, so a logged-in user is not held to the anonymous GitHub limit', async ($, on) => {
+  const listing = JSON.stringify([{ name: 'beta', type: 'dir', sha: 'ccc333' }])
+  const { fetched, ran } = world(on, {
+    stdout: argv => (argv[0] === 'gh' ? listing : '{}'),
+    exit: () => 0,
+  })
+  const ui = await start($)
+
+  await ui.press({ key: 'check-updates' })
+
+  expect(ran.find(run => run.argv[0] === 'gh')?.argv).toEqual(['gh', 'api', 'repos/acme/skills/contents/skills'])
+  expect(fetched).toEqual([])
+  expect((await ui.find({ key: 'message' }))?.text).toBe('Update check done: 1 update(s) available.')
+  expect(await ui.find({ key: 'update:user:beta' })).toBeDefined()
+})
+
+test('a check that GitHub refuses is reported as failed, not as no update', async ($, on) => {
+  world(on, { exit: argv => (argv[0] === 'gh' ? 1 : 0) })
+  const ui = await start($)
+
+  await ui.press({ key: 'check-updates' })
+
+  expect((await ui.find({ key: 'message' }))?.text).toBe('Update check done: 0 update(s) available, 1 check(s) failed (HTTP 404).')
+})
+
 test('import history merges transcript counts, slash commands included', async ($, on) => {
   const { ran, store } = world(on, {
     stdout: argv =>

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 import type { PaneView, ScopeFilter, SkillRow, SkillScope, SortKey, UpdateInfo, UsageMap } from '../types'
-import type { Paths } from './core'
+import type { Paths, UpdateBatch } from './core'
 import {
   ago,
   fit,
@@ -18,13 +18,16 @@ import {
   isModifiedAfter,
   lastLine,
   plainText,
+  folderListing,
   lockSkills,
   mergeUsage,
   parseFrontmatter,
   pathsFrom,
   pluginInstalls,
+  UPDATE_ENV,
+  updateBatches,
   updateChecks,
-  updateCommand,
+  updatedRows,
   usageOf,
   visibleRows,
 } from './core'
@@ -42,7 +45,7 @@ const viewAtom = atom({ plugin: 'skill-manager', key: 'view' } as const, {
   confirm: null,
 } as PaneView)
 const busyAtom = atom({ plugin: 'skill-manager', key: 'busy' } as const, null as string | null)
-const busyRowAtom = atom({ plugin: 'skill-manager', key: 'busyRow' } as const, null as string | null)
+const busyRowsAtom = atom({ plugin: 'skill-manager', key: 'busyRows' } as const, [] as string[])
 const messageAtom = atom({ plugin: 'skill-manager', key: 'message' } as const, null as string | null)
 const cwdAtom = atom({ plugin: 'skill-manager', key: 'cwd' } as const, null as string | null)
 
@@ -146,18 +149,18 @@ async function refresh($: EngineInterface) {
   await update($, rowsAtom, () => rows)
 }
 
-/** Runs one action at a time; a press while another runs is ignored. `rowId` marks the row it acts on. */
-async function busy($: EngineInterface, label: string, work: () => Promise<void>, rowId: string | null = null) {
+/** Runs one action at a time; a press while another runs is ignored. `rowIds` marks the rows it acts on. */
+async function busy($: EngineInterface, label: string, work: () => Promise<unknown>, rowIds: string[] = []) {
   if ((await read($, busyAtom)) !== null) return
   await update($, busyAtom, () => label)
-  await update($, busyRowAtom, () => rowId)
+  await update($, busyRowsAtom, () => rowIds)
   try {
     await work()
   } catch (error) {
     await say($, `${label} failed: ${error instanceof Error ? error.message : String(error)}`)
   } finally {
     await update($, busyAtom, () => null)
-    await update($, busyRowAtom, () => null)
+    await update($, busyRowsAtom, () => [])
   }
 }
 
@@ -182,43 +185,98 @@ async function deleteSkill($: EngineInterface, row: SkillRow) {
   await refresh($)
 }
 
-async function updateSkill($: EngineInterface, row: SkillRow) {
-  const paths = await resolvePaths($)
-  if (!paths) return
-  const command = updateCommand(row, paths, await read($, cwdAtom))
-  if ('reason' in command) {
-    await say($, `${row.name} cannot be updated: ${command.reason}`)
-    return
+/** Runs one update batch under its time limit; a run that is killed or cannot start updates nothing. */
+async function runBatch($: EngineInterface, batch: UpdateBatch) {
+  try {
+    const ran = await $.process.run(batch.argv, { cwd: batch.cwd, env: UPDATE_ENV, timeoutMs: batch.timeoutMs })
+    const done = updatedRows(batch.rows, ran.stdout, ran.exitCode)
+
+    return {
+      done,
+      failed: batch.rows.filter(row => !done.includes(row)),
+      reason: ran.exitCode === 0 ? 'not updated' : `exit ${ran.exitCode}`,
+      output: lastLine(ran.stdout) || lastLine(ran.stderr),
+    }
+  } catch (error) {
+    return { done: [], failed: batch.rows, reason: plainText(error instanceof Error ? error.message : String(error), 120), output: '' }
   }
-  const ran = await $.process.run(command.argv, { cwd: command.cwd, timeoutMs: 300_000 })
-  const output = lastLine(ran.stdout) || lastLine(ran.stderr)
-  const restart = row.source?.kind === 'plugin' ? ' Restart Claude Code to load it.' : ''
-  await say(
-    $,
-    ran.exitCode === 0 ? `Updated ${row.name}.${restart} ${output}`.trim() : `Update failed (exit ${ran.exitCode}): ${output}`,
-  )
-  if (ran.exitCode === 0) {
-    const updates = { ...(await read($, updatesAtom)) }
-    delete updates[row.id]
-    await $.store.set('updates', updates)
-    await update($, updatesAtom, () => updates)
-  }
+}
+
+/** Clears the update marks of the rows that were updated, then scans again. */
+async function settle($: EngineInterface, done: SkillRow[]) {
+  const updates = { ...(await read($, updatesAtom)) }
+  for (const row of done) delete updates[row.id]
+  await $.store.set('updates', updates)
+  await update($, updatesAtom, () => updates)
   await refresh($)
 }
 
+async function updateSkill($: EngineInterface, row: SkillRow) {
+  const paths = await resolvePaths($)
+  if (!paths) return
+  const { batches, skipped } = updateBatches([row], paths, await read($, cwdAtom))
+  const batch = batches[0]
+  if (!batch) {
+    await say($, `${row.name} cannot be updated: ${skipped[0]?.reason ?? 'no recorded source'}`)
+    return
+  }
+  const result = await runBatch($, batch)
+  const restart = row.source?.kind === 'plugin' ? ' Restart Claude Code to load it.' : ''
+  await say($, result.done.length > 0 ? `Updated ${row.name}.${restart} ${result.output}`.trim() : `Update failed (${result.reason}): ${result.output}`)
+  await settle($, result.done)
+}
+
+/** Every update the last check found, all at once: batches for different lock files and plugins run in parallel. */
+async function updateAll($: EngineInterface) {
+  const paths = await resolvePaths($)
+  if (!paths) return
+  const updates = await read($, updatesAtom)
+  const pending = (await read($, rowsAtom)).filter(row => updates[row.id]?.status === 'available')
+  const { batches, skipped } = updateBatches(pending, paths, await read($, cwdAtom))
+  await update($, busyRowsAtom, () => pending.map(row => row.id))
+  await update($, busyAtom, () => `Updating ${pending.length} skill${pending.length === 1 ? '' : 's'}`)
+  const results = await Promise.all(batches.map(batch => runBatch($, batch)))
+  const failures = new Map<string, string[]>()
+  for (const { row, reason } of [
+    ...skipped,
+    ...results.flatMap(result => result.failed.map(row => ({ row, reason: result.reason }))),
+  ])
+    failures.set(reason, [...(failures.get(reason) ?? []), row.name])
+  const done = results.flatMap(result => result.done)
+  const failed = [...failures].map(([reason, names]) => `${names.join(', ')} (${reason})`).join('; ')
+  await say($, `Updated ${done.length} of ${pending.length}${failed ? `, failed: ${failed}` : ''}.`)
+  await settle($, done)
+}
+
+/**
+ * A repo folder listing through gh when it is installed and logged in (5000 calls an hour),
+ * else through the anonymous GitHub API (60 calls an hour per public IP).
+ */
+async function listFolder($: EngineInterface, group: { api: string; url: string }) {
+  const gh = await $.process.run(['gh', 'api', group.api], { env: { GH_PROMPT_DISABLED: '1' }, timeoutMs: 30_000 }).catch(() => undefined)
+  const viaGh = gh?.exitCode === 0 ? folderListing(gh.stdout) : undefined
+  if (viaGh) return { listing: viaGh, failure: null }
+  const response = await $.http
+    .fetch(group.url, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'claude-skill-manager' } })
+    .catch(() => ({ ok: false, status: 0, text: '' }))
+  const listing = response.ok ? folderListing(response.text) : undefined
+
+  return { listing, failure: listing ? null : `HTTP ${response.status}` }
+}
+
 async function checkUpdates($: EngineInterface) {
+  await refresh($)
   const updates: Record<string, UpdateInfo> = { ...(await read($, updatesAtom)) }
   const checkedAt = new Date().toISOString()
   let available = 0
+  const failures: string[] = []
   for (const group of updateChecks(await read($, rowsAtom))) {
-    const response = await $.http
-      .fetch(group.url, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'claude-skill-manager' } })
-      .catch((error: unknown) => ({ ok: false, status: 0, text: String(error) }))
-    const listing = response.ok ? (JSON.parse(response.text) as Array<{ name: string; sha: string }>) : []
+    const { listing, failure } = await listFolder($, group)
+    if (failure) failures.push(failure)
     for (const one of group.rows) {
-      const remote = listing.find(entry => entry.name === one.leaf)
-      if (!response.ok || !remote) {
-        updates[one.id] = { status: 'error', checkedAt, detail: response.ok ? 'not found upstream' : `HTTP ${response.status}` }
+      const remote = listing?.find(entry => entry.name === one.leaf)
+      if (!remote) {
+        updates[one.id] = { status: 'error', checkedAt, detail: failure ?? 'not found upstream' }
         continue
       }
       const isNewer = remote.sha !== one.hash
@@ -228,7 +286,8 @@ async function checkUpdates($: EngineInterface) {
   }
   await $.store.set('updates', updates)
   await update($, updatesAtom, () => updates)
-  await say($, `Update check done: ${available} update(s) available.`)
+  const failed = failures.length > 0 ? `, ${failures.length} check(s) failed (${[...new Set(failures)].join(', ')})` : ''
+  await say($, `Update check done: ${available} update(s) available${failed}.`)
 }
 
 async function importHistory($: EngineInterface) {
@@ -305,7 +364,7 @@ export const register: Register = on => {
     const updates = await read($, updatesAtom)
     const view = await read($, viewAtom)
     const working = await read($, busyAtom)
-    const busyRow = await read($, busyRowAtom)
+    const busyRows = await read($, busyRowsAtom)
     const message = await read($, messageAtom)
     const now = Date.now()
     const setView = (patch: Partial<PaneView>) => update($, viewAtom, v => ({ ...v, ...patch }))
@@ -350,18 +409,18 @@ export const register: Register = on => {
           </Box>
           {status}
           <Box flexDirection="row" gap={2}>
-            {selected.source && busyRow === selected.id && (
+            {selected.source && busyRows.includes(selected.id) && (
               <Box key="updating">
                 <Text dimColor>Updating…</Text>
               </Box>
             )}
-            {selected.source && busyRow !== selected.id && (
+            {selected.source && !busyRows.includes(selected.id) && (
               <Button
                 key="update"
                 label={selected.source.kind === 'plugin' ? 'Update plugin' : 'Update from GitHub'}
                 variant="primary"
                 dimColor={working !== null}
-                onPress={() => busy($, `Updating ${selected.name}`, () => updateSkill($, selected), selected.id)}
+                onPress={() => busy($, `Updating ${selected.name}`, () => updateSkill($, selected), [selected.id])}
               />
             )}
             {deletable && !isConfirming && (
@@ -406,6 +465,9 @@ export const register: Register = on => {
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
           <Button key="refresh" label="Refresh" onPress={() => busy($, 'Scanning', () => refresh($))} />
           <Button key="check-updates" label="Check updates" onPress={() => busy($, 'Checking GitHub', () => checkUpdates($))} />
+          {pending > 0 && (
+            <Button key="update-all" label="Update all" dimColor={working !== null} onPress={() => busy($, 'Updating all', () => updateAll($))} />
+          )}
           <Button key="import-history" label="Import history" onPress={() => busy($, 'Reading transcripts', () => importHistory($))} />
         </Box>
         <Box flexDirection="row" flexWrap="wrap" gap={1}>
@@ -456,7 +518,7 @@ export const register: Register = on => {
                     {cell(LAST_WIDTH, <Text dimColor>{lastShort(use, now)}</Text>)}
                     {cell(
                       UPDATE_WIDTH,
-                      busyRow === row.id ? (
+                      busyRows.includes(row.id) ? (
                         <Box key={`updating:${row.id}`}>
                           <Text dimColor>Updating…</Text>
                         </Box>
@@ -466,7 +528,7 @@ export const register: Register = on => {
                           label="Update"
                           variant="primary"
                           dimColor={working !== null}
-                          onPress={() => busy($, `Updating ${row.name}`, () => updateSkill($, row), row.id)}
+                          onPress={() => busy($, `Updating ${row.name}`, () => updateSkill($, row), [row.id])}
                         />
                       ) : null,
                     )}
