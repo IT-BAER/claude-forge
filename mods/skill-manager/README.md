@@ -2,6 +2,10 @@
 
 A skill manager for Claude Code. It opens a pane that lists every installed skill (user, project and plugin), shows where each one came from and how often you used it, checks GitHub for newer versions, updates a skill from its source, and moves skills you no longer want to a trash folder.
 
+<img src="screenshots/skill-list.png" alt="skill-manager pane listing 218 skills" width="433">
+
+*The pane sorted by Update: six skills have a newer version on GitHub. Uses and Last come from live counts plus the imported transcript history.*
+
 ## Install
 
 Pick one way. All three need a new Claude Code session afterwards.
