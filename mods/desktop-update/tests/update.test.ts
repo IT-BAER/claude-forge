@@ -145,3 +145,49 @@ test('an installer that does not start says so and offers the update again', asy
   expect(w.toasts[0]).toBe('Could not start the Claude Desktop installer: boom')
   expect(await ui.find({ key: 'update' })).toBeDefined()
 })
+
+for (const [name, text] of [
+  ['an answer that is not JSON', '<html>gateway</html>'],
+  ['a release without updateTo', '{"currentRelease":"4.4300.0","releases":[{"version":"4.4300.0"}]}'],
+  ['a download URL on another host', feed('4.4300.0').replace('https://downloads.claude.ai/', 'https://example.com/')],
+  ['a download URL with a quote', feed('4.4300.0').replace('Claude-abc.msix', 'Claude-abc.msix\\" -Evil x')],
+] as const) {
+  test(`no line for ${name}`, async ($, on) => {
+    await start($, on, (w) => { w.feed.text = text })
+    expect((await line($)).text).toBeUndefined()
+  })
+}
+
+test('a second install press while installing starts nothing', async ($, on) => {
+  const { w } = await start($, on)
+  const { ui } = await line($)
+  await ui.press({ key: 'update' })
+  const install = ui.press({ key: 'install' })
+  await ui.press({ key: 'install' }).catch(() => {})
+  await install
+  expect(w.ran.filter((a) => a.some((x) => x.endsWith('install-update.ps1')))).toHaveLength(1)
+})
+
+test('the installing line clears once the installed version caught up', async ($, on) => {
+  const { w, clock } = await start($, on)
+  const { ui } = await line($)
+  await ui.press({ key: 'update' })
+  await ui.press({ key: 'install' })
+  w.installed = '4.4300.0.0'
+  await clock.advance(6 * 3_600_000)
+  expect((await line($)).text).toBeUndefined()
+})
+
+test('an install that never lands offers the update again after 30 minutes', async ($, on) => {
+  const { w, clock } = await start($, on)
+  const { ui } = await line($)
+  await ui.press({ key: 'update' })
+  await ui.press({ key: 'install' })
+  await clock.advance(10 * 60_000)
+  await $.session.start({ cwd: 'D:\\p', surface: 'desktop', isInteractive: true })
+  expect((await line($)).text).toMatch(/^Installing/)
+  await clock.advance(25 * 60_000)
+  await $.session.start({ cwd: 'D:\\p', surface: 'desktop', isInteractive: true })
+  expect((await line($)).text).toBe('Claude Desktop 4.4300.0 is available (installed 4.4212.0)')
+  expect(w.installed).toBe('4.4212.0.0')
+})

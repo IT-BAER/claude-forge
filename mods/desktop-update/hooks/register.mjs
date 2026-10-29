@@ -7,14 +7,16 @@ import { atom, read, update } from 'claude-code'
 const POWERSHELL = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
 const FEED = 'https://api.anthropic.com/api/desktop/win32/x64/msix/update'
 const CHECK_EVERY = 6 * 3600000
+const INSTALL_GRACE = 30 * 60000 // an install not seen by then is offered again
+// Same rule as install-update.ps1: the URL is spliced into a command line there
+const DOWNLOAD_URL = /^https:\/\/downloads\.claude\.ai\/[^"\s]+$/
 const DEFAULT_RELAUNCH = 'explorer.exe shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude'
 const INSTALLED = "$p = Get-AppxPackage -Name Claude | Sort-Object Version -Descending | Select-Object -First 1; if (-not $p) { exit 1 }; @{ version = $p.Version.ToString(); os = [Environment]::OSVersion.Version.ToString() } | ConvertTo-Json -Compress"
 
 // What the band shows: the offered release (null = nothing) and where the person is in the install
-const view = atom({ plugin: 'desktop-update', key: 'view' }, { offer: null, phase: 'offer' })
+const view = atom({ plugin: 'desktop-update', key: 'view' }, { offer: null, phase: 'offer', since: 0 })
 
 let relaunch = DEFAULT_RELAUNCH
-let timer = false
 
 // First three numeric parts; Appx versions carry a fourth that the feed drops
 function version3(v) {
@@ -34,8 +36,8 @@ function parseFeed(text) {
   const current = data && data.currentRelease
   const rel = Array.isArray(data && data.releases) ? data.releases.find((r) => r && r.version === current) : null
   const to = rel && rel.updateTo
-  if (!version3(current) || !to || typeof to.url !== 'string' || !/^https:\/\//.test(to.url) || !/^[0-9a-f]{64}$/i.test(String(to.sha256 || ''))) return null
-  return { version: current, url: to.url, sha256: to.sha256.toLowerCase(), size: Number(to.size) || 0 }
+  if (!version3(current) || !to || !DOWNLOAD_URL.test(String(to.url)) || !/^[0-9a-f]{64}$/i.test(String(to.sha256 || ''))) return null
+  return { version: current, url: to.url, sha256: to.sha256.toLowerCase() }
 }
 
 function uuid() {
@@ -80,31 +82,33 @@ async function check($) {
   } catch (err) {
     $.ui.log(`desktop-update: check failed: ${(err && err.message) || err}`, { to: 'debug' })
   }
+  const now = await $.clock.now()
   await update($, view, (v) => {
-    if (v.phase === 'installing') return v
     const same = offer && v.offer && offer.version === v.offer.version
-    return { offer, phase: same ? v.phase : 'offer' }
+    // An install keeps its line until the new version is installed or INSTALL_GRACE ran out
+    if (v.phase === 'installing' && same && now - v.since < INSTALL_GRACE) return v
+    return { offer, phase: same && v.phase !== 'installing' ? v.phase : 'offer', since: 0 }
   })
 }
 
 async function later($) {
   const { offer } = await read($, view)
   if (offer) await $.store.set('dismissed', offer.version)
-  await update($, view, () => ({ offer: null, phase: 'offer' }))
+  await update($, view, () => ({ offer: null, phase: 'offer', since: 0 }))
 }
 
-async function setPhase($, from, to) {
+async function setPhase($, from, to, since = 0) {
   let moved = false
   await update($, view, (v) => {
     moved = !!v.offer && v.phase === from
-    return moved ? { ...v, phase: to } : v
+    return moved ? { ...v, phase: to, since } : v
   })
   return moved
 }
 
 // The installer starts itself again outside this session (-Detach), so it survives Desktop closing
 async function install($) {
-  if (!(await setPhase($, 'confirm', 'installing'))) return
+  if (!(await setPhase($, 'confirm', 'installing', await $.clock.now()))) return
   const { offer } = await read($, view)
   let why = ''
   try {
@@ -126,10 +130,7 @@ export const register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    if (!timer) {
-      timer = true
-      $.clock.every(CHECK_EVERY, () => check($))
-    }
+    $.clock.every(CHECK_EVERY, () => check($))
     await check($)
     return started
   })

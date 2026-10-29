@@ -9,7 +9,7 @@ Claude Desktop 4.4300.0 is available (installed 4.4212.0)   update   later
 - **update** asks first, because the install closes every Claude Desktop window and its sessions. **install** then starts the installer and the line shows that it runs.
 - **later** hides this version. The line comes back for the next newer version.
 
-The installer downloads the MSIX named by the feed, checks its SHA256 against the feed, installs it with `Add-AppxPackage -ForceApplicationShutdown` and starts Desktop again. It runs outside the session (started through `Win32_Process.Create`), so it keeps going when Desktop closes. Its log is `%LOCALAPPDATA%\claude-desktop-update\install.log`.
+The installer downloads the MSIX named by the feed, checks its SHA256 against the feed, installs it with `Add-AppxPackage -ForceApplicationShutdown` and starts Desktop again. It runs outside the session (started through `Win32_Process.Create`), so it keeps going when Desktop closes. Its log is `%LOCALAPPDATA%\claude-desktop-update\install.log`. The line shows "Installing" until the new version is installed, or for 30 minutes; after that the update is offered again. To check a download without installing, run the script by hand with `-Url`, `-Sha256`, `-Version` from the feed and `-NoInstall`.
 
 ## Why it exists
 

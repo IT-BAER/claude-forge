@@ -14,7 +14,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-if ($Url -notmatch '^https://downloads\.claude\.ai/') { [Console]::Error.WriteLine("Refused download URL: $Url"); exit 2 }
+# No quotes or spaces: -Detach splices the URL into a command line
+if ($Url -notmatch '^https://downloads\.claude\.ai/[^"\s]+$') { [Console]::Error.WriteLine("Refused download URL: $Url"); exit 2 }
 if ($RelaunchB64) { $Relaunch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($RelaunchB64)) }
 
 if ($Detach) {
@@ -40,6 +41,7 @@ $mutex = New-Object Threading.Mutex($false, 'Local\claude-desktop-update')
 if (-not $mutex.WaitOne(0)) { Write-Log "skip $Version`: another install is running"; exit 0 }
 
 $msix = Join-Path $dir "Claude-$Version.msix"
+$hash = $null
 try {
   Write-Log "start $Version from $Url"
   Invoke-WebRequest -Uri $Url -OutFile $msix -UseBasicParsing
@@ -54,6 +56,7 @@ try {
   Write-Log "failed $Version`: $($_.Exception.Message)"
   exit 1
 } finally {
+  # Keep the file only when it is verified and about to be installed
   if ($NoInstall -or $hash -ne $Sha256) { Remove-Item -LiteralPath $msix -Force -ErrorAction SilentlyContinue }
 }
 
