@@ -90,7 +90,7 @@ const ready = () => !!H.text && !S.working
 const RESUME_LINE = /^\s*Continue from session handoff:/i
 
 // Autonomous mode (the band's A): each ready handoff is cleared and continued
-// without you, until a turn ends without one. Lasts for this process.
+// without you, until a turn ends without one. Lasts for this process; a mod reload takes it back from the live file.
 let auto = false
 const AUTO_GRACE = 3000 // after the turn end: turn.complete is still taking the handoff file
 const AUTO_PROMPT = 'Autonomous mode is on: nobody is at the keyboard. Do not ask the user or wait for approval, "proceed" or "go". Where you would ask or offer a choice, decide with your own recommendation and continue.'
@@ -120,6 +120,21 @@ async function setAuto($, on, why) {
   if (why) toast($, why, { timeoutMs: 10000 })
   $.ui.invalidate('ui.render')
   await heartbeat($, true)
+}
+
+// A mod reload starts the module over mid-chat: A and the background shells come back from the
+// chat's live file. A file marked ended belongs to a chat this or an earlier process closed.
+async function restoreAuto($) {
+  try {
+    const path = outsidePath('live', S.id)
+    if (!(await $.fs.exists(path))) return
+    const live = JSON.parse(await $.fs.read(path))
+    if (!live || live.ended) return
+    auto = !!live.auto
+    for (const [id, at] of Array.isArray(live.bg) ? live.bg : []) if (now - at < AUTO_BG_MS) bgShells.set(id, at)
+  } catch {
+    // no readable record: A stays off
+  }
 }
 
 function waitsForWork() {
@@ -577,7 +592,7 @@ async function writeLive($, hb, ended) {
       // surfaces unavailable: the reader falls back to matching the cwd
     }
     lastLiveHandoff = handoffState()
-    const live = { ...hb, surfaces, rateLimits: allLimits(), rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, auto, ended }
+    const live = { ...hb, surfaces, rateLimits: allLimits(), rewriteUsd: rewriteCost(S.ctx, S.model, ttlMin()), bigTokens: settings.bigTokens, masked: rec.strict, handoff: lastLiveHandoff, auto, bg: [...bgShells], ended }
     await $.fs.write(outsidePath('live', hb.id), JSON.stringify(live))
   } catch {
     // a failed write only leaves the outside readers stale
@@ -850,6 +865,8 @@ export function register(on) {
     S.cwd = await $.session.cwd()
     S.label = basename(S.cwd)
     S.model = await $.session.model()
+    // before any heartbeat rewrites the live file
+    await restoreAuto($)
     await loadSettings($)
     await readRecording($)
     names.cache = (await registerCommand($, 'cache', 'Session Band status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]] [toasts [on|off]]')) || names.cache
@@ -1037,7 +1054,10 @@ export function register(on) {
       const r = await next(e)
       const started = BG_STARTED.exec(String(r && r.text || '')) || []
       const bg = !e.agentId && r && ((r.result && r.result.backgroundTaskId) || started[1] || started[2])
-      if (bg) bgShells.set(bg, await $.clock.now())
+      if (bg) {
+        bgShells.set(bg, await $.clock.now())
+        await heartbeat($, true) // into the live file before a reload can lose it
+      }
       // a denied or failed write left the file as it was
       if (!e.agentId && r && !r.deny && !r.isError && noteHandoffFile(e)) await captureHandoffFile($, H.file, true)
       return r

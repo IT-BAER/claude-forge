@@ -512,7 +512,7 @@ test('a request after a compaction or /clear that writes the shorter context is 
 })
 
 // Autonomous mode: the band's A toggle
-async function startAuto($: any, on: any) {
+async function startAuto($: any, on: any, seed: Record<string, string> = {}) {
   const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
   const submitted: string[] = []
   const shell = { value: { result: {}, text: '' } as any }
@@ -523,7 +523,7 @@ async function startAuto($: any, on: any) {
     on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
     on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); if (e.tool === 'Bash' || e.tool.startsWith('mcp__ccd_')) return shell.value; return { result: { text: '' } } })
     on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
-  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript, ...seed })
   const files = ctx.files
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const band = async (surface: 'terminal' | 'desktop' = 'terminal') => {
@@ -683,6 +683,35 @@ test('with A on, a message that starts a turn in a side session holds A until it
   expect(toasts.some((t) => /^Autonomous mode off: the turn ended without a handoff/.test(t))).toBe(true)
 })
 
+test('with A on, the live file records each running background shell', async ($, on) => {
+  const { shell, toggle, live } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: { stdout: '', backgroundTaskId: 'b1' }, text: 'Command running in background with ID: b1.' }
+  await $.turn.start({ turnId: 't1', text: 'run the playtest' } as any)
+  await $.tool.call({ tool: 'Bash', command: 'npm run playtest', run_in_background: true } as any)
+  expect(live().bg).toEqual([['b1', NOW]])
+})
+
+// A mod update reloads the module mid-session: its variables start over and session.start runs again
+const previous = (rec: Record<string, unknown>) => ({ [LIVE]: JSON.stringify({ id: 'sess-1', updatedAt: NOW - 1000, ended: false, ...rec }) })
+
+test('after a reload, A and a running background shell come back, so the next turn end keeps A on', async ($, on) => {
+  const { turn, live } = await startAuto($, on, previous({ auto: true, bg: [['b1', NOW - 10 * 60000]] }))
+  expect(live().auto).toBe(true)
+  await turn('t1', 'status?')
+  expect(live().auto).toBe(true)
+  await turn('t2', notification('b1'))
+  expect(live().auto).toBe(false)
+})
+
+test('after a reload with A on and no background shell, the next turn end without a handoff turns A off', async ($, on) => {
+  const { turn, live, toasts } = await startAuto($, on, previous({ auto: true, bg: [] }))
+  expect(live().auto).toBe(true)
+  await turn('t1', 'status?')
+  expect(live().auto).toBe(false)
+  expect(toasts.some((t) => /^Autonomous mode off: the turn ended without a handoff/.test(t))).toBe(true)
+})
+
 test('with A on, a proposed side session holds nothing: the turn without a handoff turns A off', async ($, on) => {
   const { shell, toggle, turn, live } = await startAuto($, on)
   await toggle()
@@ -697,6 +726,18 @@ test('with A on, a turn that ends while a background agent runs keeps A on', asy
   agents.value = [{ status: 'running' }]
   await turn('t1', 'review the diff')
   expect(live().auto).toBe(true)
+})
+
+test('after a reload, a background shell older than 2 hours is not restored', async ($, on) => {
+  const { turn, live } = await startAuto($, on, previous({ auto: true, bg: [['b1', NOW - 2 * 3600000]] }))
+  await turn('t1', 'status?')
+  expect(live().auto).toBe(false)
+})
+
+test('a chat whose live file says it ended does not bring A back', async ($, on) => {
+  const { live } = await startAuto($, on, previous({ auto: true, bg: [['b1', NOW - 60000]], ended: true }))
+  expect(live().auto).toBe(false)
+  expect(live().bg).toEqual([])
 })
 
 test('with A on, the third handoff within 15 minutes turns A off instead of continuing', async ($, on) => {
