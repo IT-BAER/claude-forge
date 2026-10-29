@@ -30,7 +30,7 @@ Start a new session afterwards.
 
 ## The band
 
-`● c 60m │ ctx 342k │ rwc $2.73 │ sc $13 │ 5h 84% w 24%`
+`● c 60m · ctx 342k · rwc $2.73 · sc $13 · 5h 84% w 24%`
 
 | Part | Meaning |
 | --- | --- |

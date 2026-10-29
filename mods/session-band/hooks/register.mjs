@@ -1137,15 +1137,15 @@ export function register(on) {
     else if (st.kind === 'warm') parts.push(Text({ color: 'green', hover: tip('ck-c'), children: [`● c ${minutes(st.left)}`] }))
     else if (st.kind === 'cooling') parts.push(Text({ color: 'yellow', bold: true, hover: tip('ck-c'), children: [`◐ c ${minutes(st.left)}`] }))
     else if (st.kind === 'cold') parts.push(Text(big ? { color: 'red', bold: true, hover: tip('ck-c'), children: [`○ c cold ${minutes(-st.left)}`] } : { dimColor: true, hover: tip('ck-c'), children: [`○ c cold ${minutes(-st.left)}`] }))
-    parts.push(Text({ dimColor: true, hover: tip('ck-ctx'), children: [` │ ctx ${tokens(S.ctx)}`] }))
-    if (st.kind === 'cold' && big) parts.push(Text({ color: 'red', hover: tip('ck-rewrite'), children: [` │ next send rewrites it ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
-    else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` │ rwc ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
-    parts.push(Text({ dimColor: true, hover: tip('ck-sc'), children: [` │ sc ${money(S.costUsd)}`] }))
+    parts.push(Text({ dimColor: true, hover: tip('ck-ctx'), children: [` · ctx ${tokens(S.ctx)}`] }))
+    if (st.kind === 'cold' && big) parts.push(Text({ color: 'red', hover: tip('ck-rewrite'), children: [` · next send rewrites it ≈ ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
+    else parts.push(Text({ dimColor: true, hover: tip('ck-rewrite'), children: [` · rwc ${money(rewriteCost(S.ctx, S.model, ttl))}`] }))
+    parts.push(Text({ dimColor: true, hover: tip('ck-sc'), children: [` · sc ${money(S.costUsd)}`] }))
     const cold = S.coldRestarts.length
     const coldUsd = money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))
-    if (cold) parts.push(Text({ dimColor: true, hover: tip('ck-cr'), children: [` │ cr ${cold} ${coldUsd}`] }))
+    if (cold) parts.push(Text({ dimColor: true, hover: tip('ck-cr'), children: [` · cr ${cold} ${coldUsd}`] }))
     const limits = allLimits()
-    limits.forEach((l, i) => parts.push(Text(limitTone(limitColor(l, now), { hover: tip('ck-limits'), children: [`${i ? ' ' : ' │ '}${limitLabel(l)} ${Math.round(l.percentUsed)}%`] }))))
+    limits.forEach((l, i) => parts.push(Text(limitTone(limitColor(l, now), { hover: tip('ck-limits'), children: [`${i ? ' ' : ' · '}${limitLabel(l)} ${Math.round(l.percentUsed)}%`] }))))
     // Whole segments wrap to a second row; a squeezed segment would split its label from its value
     const row = [Box({ flexDirection: 'row', flexWrap: 'wrap', children: parts })]
     if (st.kind === 'cooling' && big) {
