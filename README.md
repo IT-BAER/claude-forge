@@ -8,6 +8,7 @@ A mod adds a pane, a band or a command to Claude Code itself.
 
 | Mod | What it does |
 | --- | --- |
+| [`desktop-update`](mods/desktop-update) | A line above the prompt when a newer Claude Desktop is on Anthropic's update feed, with a one-click install that closes Desktop, updates the MSIX package and starts it again. For installs with auto-update turned off by policy. Windows only. |
 | [`file-explorer`](mods/file-explorer) | VS Code style file tree with preview, editor, search and find and replace in a pane. Command: `/files`. Windows only. |
 | [`prompt-templates`](mods/prompt-templates) | Prompt template library in a pane: search, tags, `{{variables}}` with a fill-in form, and Fill, Insert, Send or Copy for each template; editor and JSON import/export. Command: `/prompts`. |
 | [`session-band`](mods/session-band) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, `/board`, `/handoff` and an autonomous mode that clears and continues each handoff without you (needs the `session-handoff` skill). Fork of Cache Keeper by Nate Herk. |
@@ -49,6 +50,7 @@ claude plugin marketplace add IT-BAER/claude-forge
 ### 2. Install what you want
 
 ```
+/plugin install desktop-update@claude-forge
 /plugin install file-explorer@claude-forge
 /plugin install prompt-templates@claude-forge
 /plugin install session-band@claude-forge

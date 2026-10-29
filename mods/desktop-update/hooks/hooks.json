@@ -1,0 +1,4 @@
+{
+  "description": "Desktop Update hooks module",
+  "modules": ["./register.mjs"]
+}

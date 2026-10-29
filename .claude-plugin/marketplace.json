@@ -6,6 +6,11 @@
   },
   "plugins": [
     {
+      "name": "desktop-update",
+      "source": "./mods/desktop-update",
+      "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on the update feed, with a one-click install; for installs with auto-update off"
+    },
+    {
       "name": "file-explorer",
       "source": "./mods/file-explorer",
       "description": "VS Code style file tree of the session's working directory in a pane"

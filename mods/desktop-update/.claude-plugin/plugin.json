@@ -1,0 +1,12 @@
+{
+  "name": "desktop-update",
+  "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on Anthropic's update feed, with a one-click install that closes Desktop, updates the package and starts it again. Meant for installs with auto-update turned off by policy.",
+  "author": {
+    "name": "IT-BAER"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "relaunch": { "type": "string", "title": "Start Desktop after the update", "description": "cmd.exe command line run after the install, to start Claude Desktop again. Join several commands with &. Empty: the Start menu entry of the Claude package.", "default": "" }
+  }
+}
