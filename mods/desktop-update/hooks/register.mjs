@@ -69,6 +69,7 @@ async function latestRelease($, installed, os) {
 // Fails closed: any error leaves no line
 async function check($) {
   let offer = null
+  let known = false
   try {
     const r = await $.process.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-Command', INSTALLED], { timeoutMs: 30000 })
     if (r.exitCode === 0) {
@@ -77,6 +78,7 @@ async function check($) {
       if (installed) {
         const latest = await latestRelease($, installed.join('.'), String(local.os || ''))
         if (newer(version3(latest.version), installed) && (await $.store.get('dismissed')) !== latest.version) offer = { ...latest, installed: installed.join('.') }
+        known = true
       }
     }
   } catch (err) {
@@ -86,7 +88,7 @@ async function check($) {
   await update($, view, (v) => {
     const same = offer && v.offer && offer.version === v.offer.version
     // An install keeps its line until the new version is installed or INSTALL_GRACE ran out
-    if (v.phase === 'installing' && same && now - v.since < INSTALL_GRACE) return v
+    if (v.phase === 'installing' && (same || !known) && now - v.since < INSTALL_GRACE) return v
     return { offer, phase: same && v.phase !== 'installing' ? v.phase : 'offer', since: 0 }
   })
 }
@@ -110,6 +112,7 @@ async function setPhase($, from, to, since = 0) {
 async function install($) {
   if (!(await setPhase($, 'confirm', 'installing', await $.clock.now()))) return
   const { offer } = await read($, view)
+  if (!offer) return
   let why = ''
   try {
     const r = await $.process.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', `${$.plugin.root}/hooks/install-update.ps1`,

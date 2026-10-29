@@ -191,3 +191,14 @@ test('an install that never lands offers the update again after 30 minutes', asy
   expect((await line($)).text).toBe('Claude Desktop 4.4300.0 is available (installed 4.4212.0)')
   expect(w.installed).toBe('4.4212.0.0')
 })
+
+test('a failed check during an install keeps the installing line', async ($, on) => {
+  const { w, clock } = await start($, on)
+  const { ui } = await line($)
+  await ui.press({ key: 'update' })
+  await ui.press({ key: 'install' })
+  w.installed = null
+  await clock.advance(5 * 60_000)
+  await $.session.start({ cwd: 'D:\\p', surface: 'desktop', isInteractive: true })
+  expect((await line($)).text).toMatch(/^Installing/)
+})

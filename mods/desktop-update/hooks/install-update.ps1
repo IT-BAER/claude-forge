@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 # No quotes or spaces: -Detach splices the URL into a command line
-if ($Url -notmatch '^https://downloads\.claude\.ai/[^"\s]+$') { [Console]::Error.WriteLine("Refused download URL: $Url"); exit 2 }
+if ($Url -notmatch '^https://downloads\.claude\.ai/[^"\s]+\z') { [Console]::Error.WriteLine("Refused download URL: $Url"); exit 2 }
 if ($RelaunchB64) { $Relaunch = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($RelaunchB64)) }
 
 if ($Detach) {
