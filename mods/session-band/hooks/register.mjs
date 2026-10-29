@@ -107,11 +107,12 @@ const AUTO_LOOP_MS = 15 * 60000
 let autoRuns = [] // when A cleared and continued, newest last
 // The afk-shutdown watcher counts a session finished by this last answer line; continuing would start new work
 const AFK_END = /\n?\s*\[afk-shutdown\] (?:DONE|BLOCKED) handoff=\S+[^\n]*\s*$/
-// Background shells: a turn that waits for one does not end the loop. An id goes when a turn starts
-// with its notification, or after AUTO_BG_MS (a notification read inside a busy turn goes unseen).
+// Background shells and desktop side sessions: a turn that waits for one does not end the loop. An id goes
+// when a turn starts with its notification or report, or after AUTO_BG_MS (one read inside a busy turn goes unseen).
 const AUTO_BG_MS = 2 * 3600000
-const BG_STARTED = /(?:running in background with ID: |moved to the background \(ID: )(\w+)/
-const bgShells = new Map() // task id -> started at
+const BG_STARTED = /(?:running in background with ID: |moved to the background \(ID: )(\w+)|(?:Started session "[^"]*" \(session_id: |delivered to session |queued for session )(local_[\w-]+)/
+const SIDE_DONE = /\((local_[\w-]+)\) finished a turn/g
+const bgShells = new Map() // task or session id -> started at
 
 async function setAuto($, on, why) {
   auto = on
@@ -926,6 +927,7 @@ export function register(on) {
     S.working = true
     if (e.turnId) S.turnId = e.turnId
     if (!e.agentId) for (const m of String(e.text || '').matchAll(/<task-id>(\w+)<\/task-id>/g)) bgShells.delete(m[1])
+    if (!e.agentId) for (const m of String(e.text || '').matchAll(SIDE_DONE)) bgShells.delete(m[1])
     await heartbeat($, true)
     return next(e)
   })
@@ -1033,7 +1035,8 @@ export function register(on) {
     }
     try {
       const r = await next(e)
-      const bg = !e.agentId && r && ((r.result && r.result.backgroundTaskId) || (BG_STARTED.exec(String(r.text || '')) || [])[1])
+      const started = BG_STARTED.exec(String(r && r.text || '')) || []
+      const bg = !e.agentId && r && ((r.result && r.result.backgroundTaskId) || started[1] || started[2])
       if (bg) bgShells.set(bg, await $.clock.now())
       // a denied or failed write left the file as it was
       if (!e.agentId && r && !r.deny && !r.isError && noteHandoffFile(e)) await captureHandoffFile($, H.file, true)

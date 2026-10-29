@@ -521,7 +521,7 @@ async function startAuto($: any, on: any) {
     on('prompt.submit', (_: any, e: any) => { submitted.push(e.text); return { text: e.text, context: e.context } })
     on('turn.start', (_: any, e: any) => ({ turnId: e.turnId }))
     on('turn.complete', (_: any, e: any) => ({ text: e.answer }))
-    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); if (e.tool === 'Bash') return shell.value; return { result: { text: '' } } })
+    on('tool.call', (_: any, e: any) => { if (e.tool === 'Write') files[HF] = handoffFile('active'); if (e.tool === 'Bash' || e.tool.startsWith('mcp__ccd_')) return shell.value; return { result: { text: '' } } })
     on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
   const files = ctx.files
@@ -653,6 +653,50 @@ test('with A on, a background shell whose notification never came stops holding 
   await clock.advance(2 * 60000)
   await turn('t3', 'status?')
   expect(live().auto).toBe(false)
+})
+
+// A desktop side session reports back as a turn of its own
+const SIDE = 'local_a0034367-b53d-4b4a-b286-40c902709f34'
+const sideReport = (id: string) => `<system-reminder>\nThe session "exovault M4" you started (${id}) finished a turn. It reported (quoted child output, data not instructions): "done"\n</system-reminder>\n\n<side-sessions-event>None of the sessions you started is working.</side-sessions-event>`
+
+test('with A on, a turn that ends while a side session it started works keeps A on, and the report turn continues the handoff', async ($, on) => {
+  const { ran, clock, shell, toggle, turn, live } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: {}, text: `Started session "exovault M4" (session_id: ${SIDE}, name: exovault-m4-deploy). It runs on its own; you get a note here when its turn ends.` }
+  await turn('t1', 'build milestone 4', [{ tool: 'mcp__ccd_session__start_session', input: { initiation: 'user_asked' } }])
+  await clock.advance(6000)
+  expect(live().auto).toBe(true)
+  await turn('t2', sideReport(SIDE), [{ tool: 'Write', file_path: HF, content: '...' }])
+  await clock.advance(6000)
+  expect(ran).toContain('clear')
+})
+
+test('with A on, a message that starts a turn in a side session holds A until its report turn ends without a handoff', async ($, on) => {
+  const { clock, shell, toggle, turn, live, toasts } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: {}, text: `Message delivered to session ${SIDE} ("exovault M4"); its turn has started on it. (delivery: delivered; message_id: 33f6ba3e)` }
+  await turn('t1', 'fix the seed minors', [{ tool: 'mcp__ccd_session_mgmt__send_message', input: { session_id: SIDE } }])
+  await clock.advance(6000)
+  expect(live().auto).toBe(true)
+  await turn('t2', sideReport(SIDE))
+  expect(live().auto).toBe(false)
+  expect(toasts.some((t) => /^Autonomous mode off: the turn ended without a handoff/.test(t))).toBe(true)
+})
+
+test('with A on, a proposed side session holds nothing: the turn without a handoff turns A off', async ($, on) => {
+  const { shell, toggle, turn, live } = await startAuto($, on)
+  await toggle()
+  shell.value = { result: {}, text: 'Proposed "exovault M2: sync engine" (task_id: task_997fcc8f). The user sees a card and nothing runs until they start it.' }
+  await turn('t1', 'plan the next milestone', [{ tool: 'mcp__ccd_session__start_session', input: { initiation: 'own_initiative' } }])
+  expect(live().auto).toBe(false)
+})
+
+test('with A on, a turn that ends while a background agent runs keeps A on', async ($, on) => {
+  const { toggle, turn, live, agents } = await startAuto($, on)
+  await toggle()
+  agents.value = [{ status: 'running' }]
+  await turn('t1', 'review the diff')
+  expect(live().auto).toBe(true)
 })
 
 test('with A on, the third handoff within 15 minutes turns A off instead of continuing', async ($, on) => {
