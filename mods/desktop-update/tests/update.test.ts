@@ -14,6 +14,9 @@ async function start($: any, on: any, set: (w: any) => void = () => {}) {
     installed: '4.4212.0.0' as string | null,
     feed: { status: 200, text: feed('4.4300.0') },
     installExit: 0,
+    // The policy fields of the local read; undefined = an older read without them
+    policy: undefined as { sid: string, user: number | null, machine: number | null } | undefined,
+    setExit: 0,
     fetched: [] as string[],
     ran: [] as string[][],
     toasts: [] as string[],
@@ -24,8 +27,9 @@ async function start($: any, on: any, set: (w: any) => void = () => {}) {
   on('process.run', (_: any, e: any) => {
     w.ran.push([...e.argv])
     if (e.argv.some((a: string) => a.endsWith('install-update.ps1'))) return { value: { exitCode: w.installExit, stdout: '4242', stderr: w.installExit ? 'boom' : '' } }
+    if (e.argv.some((a: string) => a.endsWith('set-autoupdate.ps1'))) return { value: { exitCode: w.setExit, stdout: '4243', stderr: w.setExit ? 'boom' : '' } }
     if (w.installed === null) return { value: { exitCode: 1, stdout: '', stderr: 'no package' } }
-    return { value: { exitCode: 0, stdout: JSON.stringify({ version: w.installed, os: '10.0.26300.0' }), stderr: '' } }
+    return { value: { exitCode: 0, stdout: JSON.stringify({ version: w.installed, os: '10.0.26300.0', ...w.policy }), stderr: '' } }
   })
   on('http.fetch', (_: any, e: any) => {
     w.fetched.push(e.url)
@@ -50,6 +54,35 @@ test('a newer version on the feed shows the update line', async ($, on) => {
   await start($, on)
   const { text } = await line($)
   expect(text).toBe('Claude Desktop 4.4300.0 is available (installed 4.4212.0)')
+})
+
+// Keys of the Buttons in the right half of the full-width row, left half's text
+function halves(node: any): { left: string, right: string[] } | undefined {
+  if (!node || typeof node !== 'object') return undefined
+  const kids: any[] = node.children ?? []
+  if (node.type === 'Box' && node.props?.justifyContent === 'space-between' && node.props?.width === '100%' && kids.length === 2) {
+    const flat = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children ?? []).flatMap(flat)] : [n])
+    return {
+      left: flat(kids[0]).filter((n) => typeof n === 'string').join(' '),
+      right: flat(kids[1]).filter((n) => n?.type === 'Button').map((n) => n.props.key),
+    }
+  }
+  for (const k of kids) { const h = halves(k); if (h) return h }
+  return undefined
+}
+
+test('the buttons sit at the right edge, the text at the left', async ($, on) => {
+  await start($, on)
+  const { ui } = await line($)
+  const offer = halves(await ui.drawn())
+  expect(offer?.left).toBe('Claude Desktop 4.4300.0 is available (installed 4.4212.0)')
+  expect(offer?.right).toEqual(['later', 'update'])
+  // One row of space between this line and the band drawn beneath it
+  expect((await ui.drawn()).props).toMatchObject({ flexDirection: 'column', rowGap: 1 })
+  await ui.press({ key: 'update' })
+  const confirm = halves(await ui.drawn())
+  expect(confirm?.left).toContain('Installing closes every Claude Desktop window')
+  expect(confirm?.right).toEqual(['cancel', 'install'])
 })
 
 for (const [name, set] of [
@@ -201,4 +234,96 @@ test('a failed check during an install keeps the installing line', async ($, on)
   await clock.advance(5 * 60_000)
   await $.session.start({ cwd: 'D:\\p', surface: 'desktop', isInteractive: true })
   expect((await line($)).text).toMatch(/^Installing/)
+})
+
+const SID = 'S-1-5-21-1-2-3-1001'
+const upToDate = (w: any) => { w.feed.text = feed('4.4212.0') }
+
+async function toggle($: any) {
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  return { ui, button: await ui.find({ key: 'autoupdate' }), row: halves(await ui.drawn()) }
+}
+
+test('auto-update on and up to date: a row offers to turn it off', async ($, on) => {
+  await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null } })
+  const { button, row } = await toggle($)
+  expect(row?.left).toBe('Claude Desktop auto-update is on')
+  expect(row?.right).toEqual(['autoupdate'])
+  expect(button?.text).toBe('auto-update off')
+})
+
+test('auto-update off and up to date: no row', async ($, on) => {
+  await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: 1, machine: null } })
+  expect((await toggle($)).row).toBeUndefined()
+})
+
+test('auto-update off with a newer version: the toggle turns it back on, update stays last', async ($, on) => {
+  await start($, on, (w) => { w.policy = { sid: SID, user: 1, machine: null } })
+  const { button, row } = await toggle($)
+  expect(row?.right).toEqual(['autoupdate', 'later', 'update'])
+  expect(button?.text).toBe('auto-update on')
+})
+
+test('a machine policy leaves no toggle', async ($, on) => {
+  await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: 0 } })
+  expect((await toggle($)).row).toBeUndefined()
+})
+
+test('a machine policy with a newer version shows only later and update', async ($, on) => {
+  await start($, on, (w) => { w.policy = { sid: SID, user: null, machine: 1 } })
+  expect((await toggle($)).row?.right).toEqual(['later', 'update'])
+})
+
+test('a policy read that failed (-1) leaves no toggle', async ($, on) => {
+  await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: -1, machine: null } })
+  expect((await toggle($)).row).toBeUndefined()
+})
+
+test('the toggle starts set-autoupdate.ps1 detached with the SID and the new value, once', async ($, on) => {
+  const { w } = await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null } })
+  const { ui } = await toggle($)
+  await ui.press({ key: 'autoupdate' })
+  expect((await ui.find({ key: 'autoupdate' }))?.text).toBe('waiting for UAC')
+  await ui.press({ key: 'autoupdate' })
+  const runs = w.ran.filter((a) => a.some((x) => x.endsWith('set-autoupdate.ps1')))
+  expect(runs).toHaveLength(1)
+  const argv = runs[0]!
+  expect(argv).toContain('-Detach')
+  expect(argv[argv.indexOf('-Sid') + 1]).toBe(SID)
+  expect(argv[argv.indexOf('-Value') + 1]).toBe('1')
+})
+
+test('the new value is picked up after UAC: toast, row gone', async ($, on) => {
+  const { w, clock } = await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null } })
+  const { ui } = await toggle($)
+  await ui.press({ key: 'autoupdate' })
+  w.policy = { sid: SID, user: 1, machine: null }
+  await clock.advance(5000)
+  expect(w.toasts).toEqual(['Claude Desktop auto-update is off. Restart Desktop to apply.'])
+  expect((await toggle($)).row).toBeUndefined()
+})
+
+test('no change within 2 minutes: toast, toggle offered again', async ($, on) => {
+  const { w, clock } = await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null } })
+  const { ui } = await toggle($)
+  await ui.press({ key: 'autoupdate' })
+  await clock.advance(125000)
+  expect(w.toasts).toEqual(['Auto-update unchanged: the UAC prompt was cancelled or not answered.'])
+  expect((await toggle($)).button?.text).toBe('auto-update off')
+})
+
+test('a session start (also a mod reload) clears a pending toggle', async ($, on) => {
+  await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null } })
+  const { ui } = await toggle($)
+  await ui.press({ key: 'autoupdate' })
+  await $.session.start({ cwd: 'D:\\p', surface: 'desktop', isInteractive: true })
+  expect((await toggle($)).button?.text).toBe('auto-update off')
+})
+
+test('a setter that does not start says so', async ($, on) => {
+  const { w } = await start($, on, (w) => { upToDate(w); w.policy = { sid: SID, user: null, machine: null }; w.setExit = 1 })
+  const { ui } = await toggle($)
+  await ui.press({ key: 'autoupdate' })
+  expect(w.toasts).toEqual(['Could not start the auto-update change: boom'])
+  expect((await toggle($)).button?.text).toBe('auto-update off')
 })

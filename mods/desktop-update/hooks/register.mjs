@@ -11,7 +11,18 @@ const INSTALL_GRACE = 30 * 60000 // an install not seen by then is offered again
 // Same rule as install-update.ps1: the URL is spliced into a command line there
 const DOWNLOAD_URL = /^https:\/\/downloads\.claude\.ai\/[^"\s]+$/
 const DEFAULT_RELAUNCH = 'explorer.exe shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude'
-const INSTALLED = "$p = Get-AppxPackage -Name Claude | Sort-Object Version -Descending | Select-Object -First 1; if (-not $p) { exit 1 }; @{ version = $p.Version.ToString(); os = [Environment]::OSVersion.Version.ToString() } | ConvertTo-Json -Compress"
+// Policy values come from the real registry through WMI (StdRegProv runs outside the package;
+// this process sees the package's private hive). -1 = the read failed.
+const INSTALLED = String.raw`$p = Get-AppxPackage -Name Claude | Sort-Object Version -Descending | Select-Object -First 1; if (-not $p) { exit 1 }
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+function P([uint32]$h, [string]$k) { try { $r = Invoke-CimMethod -Namespace root/default -ClassName StdRegProv -MethodName GetDWORDValue -Arguments @{ hDefKey = $h; sSubKeyName = $k; sValueName = 'disableAutoUpdates' }; if ($r.ReturnValue -eq 0) { [int]$r.uValue } } catch { -1 } }
+$u = P 2147483651 ($sid + '\SOFTWARE\Policies\Claude'); $m = P 2147483650 'SOFTWARE\Policies\Claude'
+# PowerShell 5.1 turns "no output" into {} in JSON; a reassigned $null becomes null
+if ($null -eq $u) { $u = $null }; if ($null -eq $m) { $m = $null }
+@{ version = $p.Version.ToString(); os = [Environment]::OSVersion.Version.ToString(); sid = $sid; user = $u; machine = $m } | ConvertTo-Json -Compress`
+const SID = /^S-1-5-21-\d+-\d+-\d+-\d+$/
+const AUTO_POLL = 5000
+const AUTO_WAIT = 120000 // an unanswered UAC prompt counts as cancelled after this
 
 // What the band shows: the offered release (null = nothing) and where the person is in the install
 const view = atom({ plugin: 'desktop-update', key: 'view' }, { offer: null, phase: 'offer', since: 0 })
@@ -66,14 +77,23 @@ async function latestRelease($, installed, os) {
   return latest
 }
 
+// The toggle's input, or null when the read is incomplete or failed
+function parsePolicy(local) {
+  const ok = (x) => x === null || x === 0 || x === 1
+  if (!SID.test(String(local.sid)) || !ok(local.user) || !ok(local.machine)) return null
+  return { sid: local.sid, user: local.user, machine: local.machine }
+}
+
 // Fails closed: any error leaves no line
 async function check($) {
   let offer = null
   let known = false
+  let policy = null
   try {
     const r = await $.process.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-Command', INSTALLED], { timeoutMs: 30000 })
     if (r.exitCode === 0) {
       const local = JSON.parse(r.stdout)
+      policy = parsePolicy(local)
       const installed = version3(local.version)
       if (installed) {
         const latest = await latestRelease($, installed.join('.'), String(local.os || ''))
@@ -88,15 +108,57 @@ async function check($) {
   await update($, view, (v) => {
     const same = offer && v.offer && offer.version === v.offer.version
     // An install keeps its line until the new version is installed or INSTALL_GRACE ran out
-    if (v.phase === 'installing' && (same || !known) && now - v.since < INSTALL_GRACE) return v
-    return { offer, phase: same && v.phase !== 'installing' ? v.phase : 'offer', since: 0 }
+    if (v.phase === 'installing' && (same || !known) && now - v.since < INSTALL_GRACE) return { ...v, policy }
+    return { ...v, offer, phase: same && v.phase !== 'installing' ? v.phase : 'offer', since: 0, policy }
   })
 }
 
 async function later($) {
   const { offer } = await read($, view)
   if (offer) await $.store.set('dismissed', offer.version)
-  await update($, view, () => ({ offer: null, phase: 'offer', since: 0 }))
+  await update($, view, (v) => ({ ...v, offer: null, phase: 'offer', since: 0 }))
+}
+
+// Auto-update is on unless the user value is 1; the toggle only exists without a machine policy
+const autoOn = (policy) => !!policy && policy.user !== 1
+const canToggle = (policy) => !!policy && policy.machine === null
+
+// Elevated write through set-autoupdate.ps1 (UAC); the result shows in the next registry read
+async function toggleAuto($) {
+  const { policy, autoPending } = await read($, view)
+  if (!canToggle(policy) || autoPending != null) return
+  const want = autoOn(policy) ? 1 : 0
+  await update($, view, (v) => ({ ...v, autoPending: want }))
+  let why = ''
+  try {
+    const r = await $.process.run([POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', `${$.plugin.root}/hooks/set-autoupdate.ps1`,
+      '-Detach', '-Sid', policy.sid, '-Value', String(want)], { timeoutMs: 60000 })
+    if (r.exitCode !== 0) why = r.stderr.trim() || `exit code ${r.exitCode}`
+  } catch (err) {
+    why = String((err && err.message) || err)
+  }
+  if (why) {
+    $.ui.toast(`Could not start the auto-update change: ${why}`, { timeoutMs: 10000 })
+    await update($, view, (v) => ({ ...v, autoPending: null }))
+    return
+  }
+  // Rejects when the mod unloads mid-wait; session.start clears the pending mark then
+  watchAuto($, want).catch(() => {})
+}
+
+async function watchAuto($, want) {
+  for (let waited = 0; waited < AUTO_WAIT; waited += AUTO_POLL) {
+    await $.clock.sleep(AUTO_POLL)
+    await check($)
+    const { policy } = await read($, view)
+    if (policy && (autoOn(policy) ? 0 : 1) === want) {
+      await update($, view, (v) => ({ ...v, autoPending: null }))
+      $.ui.toast(`Claude Desktop auto-update is ${want ? 'off' : 'on'}. Restart Desktop to apply.`, { timeoutMs: 10000 })
+      return
+    }
+  }
+  await update($, view, (v) => ({ ...v, autoPending: null }))
+  $.ui.toast('Auto-update unchanged: the UAC prompt was cancelled or not answered.', { timeoutMs: 10000 })
 }
 
 async function setPhase($, from, to, since = 0) {
@@ -133,6 +195,8 @@ export const register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    // A reload ends a running watchAuto, but its pending mark lives on in $.state
+    await update($, view, (v) => ({ ...v, autoPending: null }))
     $.clock.every(CHECK_EVERY, () => check($))
     await check($)
     return started
@@ -140,24 +204,37 @@ export const register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
-    const { offer, phase } = await read($, view)
-    if (!offer || (e.props && e.props.hasSurvey)) return below
+    const { offer, phase, policy, autoPending } = await read($, view)
+    // Without an offer the row exists only to turn auto-update off
+    const toggleRow = !offer && autoOn(policy) && canToggle(policy)
+    if ((!offer && !toggleRow) || (e.props && e.props.hasSurvey)) return below
     const { Box, Text, Button } = $.ui.resolve(e)
-    const row = []
-    if (phase === 'installing') {
-      row.push(Text({ color: 'cyan', children: [`Installing Claude Desktop ${offer.version}. Desktop closes and starts again.`] }))
+    const texts = []
+    const buttons = []
+    const pending = autoPending != null
+    const toggle = () => Button({ key: 'autoupdate', label: pending ? 'waiting for UAC' : autoOn(policy) ? 'auto-update off' : 'auto-update on',
+      hotkey: 't', plain: true, dimColor: pending, onPress: () => toggleAuto($) })
+    if (toggleRow) {
+      texts.push(Text({ color: 'cyan', children: ['Claude Desktop auto-update is on'] }))
+      buttons.push(toggle())
+    } else if (phase === 'installing') {
+      texts.push(Text({ color: 'cyan', children: [`Installing Claude Desktop ${offer.version}. Desktop closes and starts again.`] }))
     } else {
-      row.push(Text({ color: 'cyan', children: [`Claude Desktop ${offer.version} is available (installed ${offer.installed})`] }))
+      texts.push(Text({ color: 'cyan', children: [`Claude Desktop ${offer.version} is available (installed ${offer.installed})`] }))
       if (phase === 'confirm') {
-        row.push(Text({ color: 'yellow', children: ['Installing closes every Claude Desktop window and its sessions.'] }))
-        row.push(Button({ key: 'install', label: 'install', hotkey: 'i', plain: true, onPress: () => install($) }))
-        row.push(Button({ key: 'cancel', label: 'cancel', hotkey: 'n', plain: true, onPress: () => setPhase($, 'confirm', 'offer') }))
+        texts.push(Text({ color: 'yellow', children: ['Installing closes every Claude Desktop window and its sessions.'] }))
+        buttons.push(Button({ key: 'cancel', label: 'cancel', hotkey: 'n', plain: true, onPress: () => setPhase($, 'confirm', 'offer') }))
+        buttons.push(Button({ key: 'install', label: 'install', hotkey: 'i', plain: true, onPress: () => install($) }))
       } else {
-        row.push(Button({ key: 'update', label: 'update', hotkey: 'u', plain: true, onPress: () => setPhase($, 'offer', 'confirm') }))
-        row.push(Button({ key: 'later', label: 'later', hotkey: 'l', plain: true, onPress: () => later($) }))
+        if (canToggle(policy)) buttons.push(toggle())
+        buttons.push(Button({ key: 'later', label: 'later', hotkey: 'l', plain: true, onPress: () => later($) }))
+        buttons.push(Button({ key: 'update', label: 'update', hotkey: 'u', plain: true, onPress: () => setPhase($, 'offer', 'confirm') }))
       }
     }
-    const mine = Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children: row })
-    return Box({ flexDirection: 'column', children: below ? [mine, below] : [mine] })
+    // Text at the left edge, buttons at the right, as in session-band's row
+    const left = Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children: texts })
+    const right = Box({ flexDirection: 'row', columnGap: 2, children: buttons })
+    const mine = Box({ flexDirection: 'row', justifyContent: 'space-between', width: '100%', columnGap: 2, children: [left, right] })
+    return Box({ flexDirection: 'column', rowGap: 1, children: below ? [mine, below] : [mine] })
   })
 }

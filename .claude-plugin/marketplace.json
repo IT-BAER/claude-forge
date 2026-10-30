@@ -8,7 +8,7 @@
     {
       "name": "desktop-update",
       "source": "./mods/desktop-update",
-      "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on the update feed, with a one-click install; for installs with auto-update off"
+      "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on the update feed, with a one-click install and a switch for Desktop's own auto-update"
     },
     {
       "name": "file-explorer",

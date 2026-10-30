@@ -1,6 +1,6 @@
 {
   "name": "desktop-update",
-  "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on Anthropic's update feed, with a one-click install that closes Desktop, updates the package and starts it again. Meant for installs with auto-update turned off by policy.",
+  "description": "A line above the prompt when a newer Claude Desktop (Windows, MSIX) is on Anthropic's update feed, with a one-click install that closes Desktop, updates the package and starts it again, and a switch that turns Desktop's own auto-update off or on (policy value, UAC prompt).",
   "author": {
     "name": "IT-BAER"
   },
