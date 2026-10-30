@@ -35,6 +35,9 @@ $dir = Join-Path $env:LOCALAPPDATA 'claude-desktop-update'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $log = Join-Path $dir 'install.log'
 function Write-Log([string]$Message) { Add-Content -Path $log -Value ('{0:yyyy-MM-dd HH:mm:ss} {1}' -f (Get-Date), $Message) -Encoding UTF8 }
+# The relaunch option is synced with the settings and can name another PC's launcher; this file is per PC
+$localRelaunch = Join-Path $dir 'relaunch.cmd'
+if (Test-Path -LiteralPath $localRelaunch) { $Relaunch = "`"$localRelaunch`"" }
 
 # Two sessions can press install at the same time; only one runs
 $mutex = New-Object Threading.Mutex($false, 'Local\claude-desktop-update')
@@ -43,7 +46,7 @@ if (-not $mutex.WaitOne(0)) { Write-Log "skip $Version`: another install is runn
 $msix = Join-Path $dir "Claude-$Version.msix"
 $hash = $null
 try {
-  Write-Log "start $Version from $Url"
+  Write-Log "start $Version from $Url, relaunch: $Relaunch"
   Invoke-WebRequest -Uri $Url -OutFile $msix -UseBasicParsing
   $hash = (Get-FileHash -Path $msix -Algorithm SHA256).Hash
   if ($hash -ne $Sha256) {

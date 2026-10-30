@@ -43,7 +43,7 @@ Desktop's own updater follows the policy value `disableAutoUpdates` under `HKCU\
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `relaunch` | empty | `cmd.exe` command line run after the install to start Desktop again; join several commands with `&`. Empty: the Start menu entry of the Claude package. Set it when you start Desktop through your own launcher, for example one per profile. |
+| `relaunch` | empty | `cmd.exe` command line run after the install to start Desktop again; join several commands with `&`. Empty: the Start menu entry of the Claude package. Set it when you start Desktop through your own launcher, for example one per profile. A file `%LOCALAPPDATA%\claude-desktop-update\relaunch.cmd` wins over this option; use it when your settings are synced between PCs with different launchers. |
 
 ## Requirements
 

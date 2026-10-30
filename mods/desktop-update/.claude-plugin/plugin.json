@@ -7,6 +7,6 @@
   "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
-    "relaunch": { "type": "string", "title": "Start Desktop after the update", "description": "cmd.exe command line run after the install, to start Claude Desktop again. Join several commands with &. Empty: the Start menu entry of the Claude package.", "default": "" }
+    "relaunch": { "type": "string", "title": "Start Desktop after the update", "description": "cmd.exe command line run after the install, to start Claude Desktop again. Join several commands with &. Empty: the Start menu entry of the Claude package. A file %LOCALAPPDATA%\\claude-desktop-update\\relaunch.cmd wins over this setting.", "default": "" }
   }
 }
