@@ -1,6 +1,6 @@
 {
   "name": "session-band",
-  "description": "Prompt cache status band (c / ctx / rwc / sc / plan limits) with hover help, cold-send guard, keep-warm, /board, /handoff that also picks up handoff files, and an autonomous mode that clears and continues each handoff. Fork of Cache Keeper by Nate Herk.",
+  "description": "Prompt cache status band (c / ctx / rwc / sc / plan limits) with hover help, cold-send guard, keep-warm, board and a handoff that also picks up handoff files (all under /session-band), and an autonomous mode that clears and continues each handoff. Fork of Cache Keeper by Nate Herk.",
   "author": {
     "name": "IT-BAER"
   },

@@ -9,7 +9,7 @@ Produce a repeatable end-of-session summary so the user can `/clear` and start a
 
 This is a **context-handoff artifact**, not a status report. The audience is a future instance of you, not a stakeholder.
 
-Session Band's `handoff` button and `/handoff` command run this skill, then offer to clear the chat and send the handoff as the fresh chat's first prompt.
+Session Band's `handoff` button and `/session-band handoff` command run this skill, then offer to clear the chat and send the handoff as the fresh chat's first prompt.
 
 ## When to invoke
 

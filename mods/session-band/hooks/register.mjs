@@ -1,6 +1,6 @@
 // Session Band (fork of Cache Keeper by Nate Herk): watches this session's prompt cache, keeps big caches warm on
 // request, refuses a cold send without asking first, and shows every local
-// session on one board (/board).
+// session on one board (/session-band board).
 //
 // Why: each request re-reads the whole context. From the cache that costs about
 // a tenth of normal input. Once the cache expires (1 hour idle on a subscription,
@@ -47,7 +47,7 @@ const S = {
 }
 
 const settings = { bigTokens: 150000, guard: true, ttlMin: 0, alerts: false, toasts: true, keepWarmHours: 4 }
-const names = { cache: 'cache', keepwarm: 'keepwarm', board: 'board', handoff: 'handoff' }
+const names = { cmd: 'session-band' }
 
 let now = 0
 let home = ''
@@ -67,7 +67,7 @@ let lastCommandAt = 0 // newest command file already taken
 let outsideBusy = false
 let endedId = '' // the chat session.end closed: never written as live again
 
-// The handoff flow. When /session-handoff runs (the band's button, /handoff, a
+// The handoff flow. When /session-handoff runs (the band's button, /session-band handoff, a
 // typed command, or Claude calling the skill), the answer of the turn it starts
 // is captured and saved to a file. "clear and continue" then runs /clear and
 // sends the handoff as the fresh chat's first prompt.
@@ -75,7 +75,7 @@ const HANDOFF_SKILL = /(^|:)session-handoff$/
 const H = {
   armed: false,
   notTurn: '', // a turn already running when the handoff was queued: not the handoff's
-  askAfter: false, // /handoff asks "clear and continue?" once the handoff is in
+  askAfter: false, // /session-band handoff asks "clear and continue?" once the handoff is in
   text: '',
   path: '',
   file: '', // a handoff file Claude wrote with Write/Edit this turn (no button, no command)
@@ -97,7 +97,7 @@ const AUTO_PROMPT = 'Autonomous mode is on: nobody is at the keyboard. Do not as
 const AUTO_ASK = 'Autonomous mode is on and nobody can answer. Pick your recommended option for each question and continue.'
 // Per-prompt context: the built-in cc-plugin-sec-default skips prompt.compose for installed mods
 const withAuto = (e) => (auto ? { ...e, context: [...(e.context ?? []), AUTO_PROMPT] } : e)
-// Every band toast; /cache toasts off mutes them all, errors included (the band still shows the state)
+// Every band toast; /session-band toasts off mutes them all, errors included (the band still shows the state)
 function toast($, text, opts) {
   if (settings.toasts) $.ui.toast(text, opts)
 }
@@ -243,7 +243,7 @@ async function captureHandoffFile($, path = H.file, early = false) {
       $.ui.invalidate('ui.render')
       return true
     }
-    if (H.announce) toast($, `Handoff file written: ${path}. Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+    if (H.announce) toast($, `Handoff file written: ${path}. Press c on the band or type /${names.cmd} handoff continue to clear and continue.`, { timeoutMs: 15000 })
     H.announce = false
     const askAfter = H.askAfter
     H.armed = false
@@ -303,7 +303,7 @@ async function captureHandoff($, e) {
     H.path = ''
   }
   const saved = H.path ? `Handoff saved to ${H.path}.` : 'Handoff captured (the backup file could not be written).'
-  toast($, `${saved} Press c on the band or type /${names.handoff} continue to clear and continue.`, { timeoutMs: 15000 })
+  toast($, `${saved} Press c on the band or type /${names.cmd} handoff continue to clear and continue.`, { timeoutMs: 15000 })
   // Off the hook: the turn is ending, and a dialog would hold it open
   if (askAfter) $.clock.after(300, () => offerContinue($).catch(() => {}))
 }
@@ -314,7 +314,7 @@ async function offerContinue($) {
   try {
     answer = await $.ui.ask('Handoff saved. Clear this chat and continue with it in a fresh context?', ['Clear and continue', 'Keep this chat'])
   } catch {
-    return // dismissed: the band button and /handoff continue still work
+    return // dismissed: the band button and /session-band handoff continue still work
   }
   if (answer === 'Clear and continue') await clearAndContinue($)
 }
@@ -328,7 +328,7 @@ function continuationPrompt() {
 async function clearAndContinue($) {
   if (H.continuing) return
   if (!H.text) {
-    toast($, `No handoff ready. Press h on the band or type /${names.handoff} first.`, { timeoutMs: 8000 })
+    toast($, `No handoff ready. Press h on the band or type /${names.cmd} handoff first.`, { timeoutMs: 8000 })
     return
   }
   if (S.working) {
@@ -804,7 +804,7 @@ function warnStep($) {
     alerted.set(hb.id, key)
     const cost = money(rewriteCost(hb.ctx, hb.model, hb.ttlMin))
     const who = hb.self ? 'This session' : `"${mask(hb.label)}"`
-    const how = hb.self ? `type /${names.keepwarm} or press 1` : `open /${names.board} to keep it warm`
+    const how = hb.self ? `type /${names.cmd} keepwarm or press 1` : `open /${names.cmd} board to keep it warm`
     toast($, `${who}: ${tokens(hb.ctx)}-token cache goes cold in ${minutes(st.left)}. Rewriting it costs about ${cost}. ${how}.`, { timeoutMs: 15000 })
   }
   // Another session started waiting on a permission or a question
@@ -846,7 +846,8 @@ function statusText() {
   if (allLimits().length) lines.push(`Plan limits used: ${limitsText(allLimits())}.`)
   lines.push(`Session cost so far: ${money(S.costUsd)}. Cold restarts this session: ${S.coldRestarts.length} (${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}).`)
   lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}. Toasts: ${settings.toasts ? 'on' : 'off'}.`)
-  lines.push(`Settings: /${names.cache} ttl 5|60|auto, /${names.cache} guard on|off, /${names.cache} big 150k, /${names.cache} alerts [on|off], /${names.cache} toasts [on|off] (no value toggles). Board: /${names.board}.`)
+  const n = names.cmd
+  lines.push(`Settings: /${n} ttl 5|60|auto, /${n} guard on|off, /${n} big 150k, /${n} alerts [on|off], /${n} toasts [on|off] (no value toggles). Also /${n} keepwarm [hours|off], /${n} board, /${n} handoff [continue].`)
   return lines.join('\n')
 }
 
@@ -854,6 +855,61 @@ function parseTokens(text) {
   const m = String(text || '').trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*([km]?)$/)
   if (!m) return null
   return Math.round(Number(m[1]) * (m[2] === 'm' ? 1e6 : m[2] === 'k' ? 1e3 : 1))
+}
+
+// handoff runs the handoff and then asks to clear and continue (the band's
+// buttons draw only in the terminal); handoff continue does the second half.
+// Both run off the hook: a command started inside a hook the session is
+// waiting on is refused.
+async function handoffCommand($, arg) {
+  if (arg === 'continue' || arg === 'go') {
+    if (!H.text) return { text: `No handoff ready yet. Type /${names.cmd} handoff to make one.` }
+    $.clock.after(50, () => clearAndContinue($).catch(() => {}))
+    return { text: 'Clearing this chat and continuing with the handoff.' }
+  }
+  H.askAfter = true
+  $.clock.after(50, () => runHandoff($).catch(() => {}))
+  return { text: 'Running the session handoff. When it finishes, you can clear this chat and continue with it.' }
+}
+
+async function settingsCommand($, args) {
+  const [key, value] = args.split(/\s+/)
+  if (key === 'ttl') {
+    settings.ttlMin = value === '5' ? 5 : value === '60' ? 60 : 0
+  } else if (key === 'guard' || key === 'alerts' || key === 'toasts') {
+    // no value toggles
+    settings[key] = value === undefined ? !settings[key] : value !== 'off'
+  } else if (key === 'big') {
+    const n = parseTokens(value)
+    if (n) settings.bigTokens = n
+  }
+  if (key) {
+    await $.store.set('settings', settings)
+    $.ui.invalidate('ui.render')
+  }
+  return { text: statusText() }
+}
+
+async function keepwarmCommand($, arg) {
+  if (arg === 'off' || (arg === '' && S.keepWarm)) {
+    stopKeepWarm($, 'turned off')
+  } else {
+    const hours = Number(arg) > 0 ? Math.min(24, Number(arg)) : settings.keepWarmHours
+    startKeepWarm($, hours)
+  }
+  await heartbeat($, true)
+  $.ui.invalidate('ui.render')
+  return {}
+}
+
+async function boardCommand($) {
+  await heartbeat($, true)
+  await readFleet($)
+  const surface = await $.session.surface()
+  if (!surface) return { text: boardText() }
+  paneOpen = true
+  await $.ui.open({ id: PANE, title: 'Sessions', focus: true, closeOnEscape: true })
+  return {}
 }
 
 export function register(on) {
@@ -869,10 +925,8 @@ export function register(on) {
     await restoreAuto($)
     await loadSettings($)
     await readRecording($)
-    names.cache = (await registerCommand($, 'cache', 'Session Band status and settings', '[ttl 5|60|auto] [guard on|off] [big 150k] [alerts [on|off]] [toasts [on|off]]')) || names.cache
-    names.keepwarm = (await registerCommand($, 'keepwarm', 'Keep this session\'s prompt cache warm (default 4 hours), or /keepwarm off', '[hours|off]', true)) || names.keepwarm
-    names.board = (await registerCommand($, 'board', 'Every local Claude Code session: state, context, cache, cost', '', true)) || names.board
-    names.handoff = (await registerCommand($, 'handoff', 'Session handoff, then clear this chat and continue with it (/handoff continue)', '[continue]')) || names.handoff
+    // immediate: one flag covers every subcommand; each one is safe mid-turn
+    names.cmd = (await registerCommand($, 'session-band', 'Session Band: status and settings, keepwarm, board, handoff', '[keepwarm [hours|off]] [board] [handoff [continue]] [ttl|guard|big|alerts|toasts ...]', true)) || names.cmd
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
     $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
     // Run the mods below first: the startup command list misses commands they register late.
@@ -1069,71 +1123,22 @@ export function register(on) {
     }
   })
 
-  // /session-handoff from anywhere (typed, the band, /handoff): watch for its answer
+  // /session-handoff from anywhere (typed, the band, /session-band handoff): watch for its answer
   on('command.run', async ($, e, next) => {
     if (HANDOFF_SKILL.test(String(e.command || ''))) armHandoff(false)
     return next(e)
   })
 
-  // /handoff runs the handoff and then asks to clear and continue (the band's
-  // buttons draw only in the terminal); /handoff continue does the second half.
-  // Both run off the hook: a command started inside a hook the session is
-  // waiting on is refused.
-  on('command.run', { command: ['handoff', 'ck-handoff'] }, async ($, e) => {
+  // /session-band <subcommand> [args]; no or an unknown subcommand goes to the settings
+  on('command.run', { command: ['session-band', 'ck-session-band'] }, async ($, e) => {
     now = await $.clock.now()
-    const arg = String(e.args || '').trim().toLowerCase()
-    if (arg === 'continue' || arg === 'go') {
-      if (!H.text) return { text: `No handoff ready yet. Type /${names.handoff} to make one.` }
-      $.clock.after(50, () => clearAndContinue($).catch(() => {}))
-      return { text: 'Clearing this chat and continuing with the handoff.' }
-    }
-    H.askAfter = true
-    $.clock.after(50, () => runHandoff($).catch(() => {}))
-    return { text: 'Running the session handoff. When it finishes, you can clear this chat and continue with it.' }
-  })
-
-  on('command.run', { command: ['cache', 'ck-cache'] }, async ($, e) => {
-    now = await $.clock.now()
-    const [key, value] = String(e.args || '').trim().toLowerCase().split(/\s+/)
-    if (key === 'ttl') {
-      settings.ttlMin = value === '5' ? 5 : value === '60' ? 60 : 0
-    } else if (key === 'guard' || key === 'alerts' || key === 'toasts') {
-      // no value toggles
-      settings[key] = value === undefined ? !settings[key] : value !== 'off'
-    } else if (key === 'big') {
-      const n = parseTokens(value)
-      if (n) settings.bigTokens = n
-    }
-    if (key) {
-      await $.store.set('settings', settings)
-      $.ui.invalidate('ui.render')
-    }
-    return { text: statusText() }
-  })
-
-  on('command.run', { command: ['keepwarm', 'ck-keepwarm'] }, async ($, e) => {
-    now = await $.clock.now()
-    const arg = String(e.args || '').trim().toLowerCase()
-    if (arg === 'off' || (arg === '' && S.keepWarm)) {
-      stopKeepWarm($, 'turned off')
-    } else {
-      const hours = Number(arg) > 0 ? Math.min(24, Number(arg)) : settings.keepWarmHours
-      startKeepWarm($, hours)
-    }
-    await heartbeat($, true)
-    $.ui.invalidate('ui.render')
-    return {}
-  })
-
-  on('command.run', { command: ['board', 'ck-board'] }, async ($, e) => {
-    now = await $.clock.now()
-    await heartbeat($, true)
-    await readFleet($)
-    const surface = await $.session.surface()
-    if (!surface) return { text: boardText() }
-    paneOpen = true
-    await $.ui.open({ id: PANE, title: 'Sessions', focus: true, closeOnEscape: true })
-    return {}
+    const args = String(e.args || '').trim().toLowerCase()
+    const [sub] = args.split(/\s+/)
+    const rest = args.slice(sub.length).trim()
+    if (sub === 'handoff') return handoffCommand($, rest)
+    if (sub === 'keepwarm') return keepwarmCommand($, rest)
+    if (sub === 'board') return boardCommand($)
+    return settingsCommand($, args)
   })
 
   on('ui.close', async ($, e, next) => {
@@ -1224,12 +1229,12 @@ function footerLabel() {
   const st = cacheState(myHeartbeat())
   const big = S.ctx >= settings.bigTokens
   if (st.kind === 'kept') parts.push('cache kept warm')
-  else if (st.kind === 'cooling' && big) parts.push(`cache cools in ${minutes(st.left)} · /keepwarm`)
+  else if (st.kind === 'cooling' && big) parts.push(`cache cools in ${minutes(st.left)} · /${names.cmd} keepwarm`)
   else if (st.kind === 'cold' && big) parts.push(`cache cold · rewrite ≈ ${money(rewriteCost(S.ctx, S.model, ttlMin()))}`)
   const high = allLimits().filter((l) => limitColor(l, now))
   if (high.length) parts.push(limitsText(high))
   if (auto) parts.push('autonomous')
-  if (ready()) parts.push(`handoff ready · /${names.handoff} continue`)
+  if (ready()) parts.push(`handoff ready · /${names.cmd} handoff continue`)
   return parts.join(' · ')
 }
 

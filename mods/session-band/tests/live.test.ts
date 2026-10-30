@@ -465,7 +465,7 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
     on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
     on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
-  await $.command.run({ command: 'keepwarm', args: '2' } as any)
+  await $.command.run({ command: 'session-band', args: 'keepwarm 2' } as any)
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
   const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -791,15 +791,32 @@ test('with A on, each prompt tells Claude nobody is at the keyboard and question
   expect(await context()).toEqual([])
 })
 
-test('/cache toasts off mutes the band\'s toasts, and /cache toasts on brings them back', async ($, on) => {
+test('/session-band toasts off mutes the band\'s toasts, and /session-band toasts on brings them back', async ($, on) => {
   const { toggle, toasts } = await startAuto($, on)
-  expect(((await $.command.run({ command: 'cache', args: 'toasts off' } as any)) as any).text).toMatch(/Toasts: off/)
+  expect(((await $.command.run({ command: 'session-band', args: 'toasts off' } as any)) as any).text).toMatch(/Toasts: off/)
   const before = toasts.length
   await toggle()
   expect(toasts.length).toBe(before)
-  await $.command.run({ command: 'cache', args: 'toasts on' } as any)
+  await $.command.run({ command: 'session-band', args: 'toasts on' } as any)
   await toggle()
   expect(toasts.slice(before)).toEqual(['Autonomous mode off.'])
+})
+
+test('/session-band runs status, board and handoff as subcommands, and the old /cache is gone', async ($, on) => {
+  const { clock, ran } = await start($, on, (on) => { on('session.surface', () => ({ value: null })) })
+  const run = async (command: string, args: string) => ((await $.command.run({ command, args } as any)) as any) || {}
+  const status = await run('session-band', '')
+  expect(status.text).toMatch(/Toasts: on\./)
+  expect(status.text).toMatch(/\/session-band toasts \[on\|off\]/)
+  expect(status.text).toMatch(/\/session-band board/)
+  expect((await run('session-band', 'board')).text).toMatch(/^Sessions on this machine:/)
+  expect((await run('session-band', 'handoff continue')).text).toBe('No handoff ready yet. Type /session-band handoff to make one.')
+  expect((await run('session-band', 'handoff')).text).toMatch(/^Running the session handoff/)
+  await clock.advance(100)
+  expect(ran).toContain('session-handoff')
+  expect((await run('session-band', 'nonsense')).text).toMatch(/Toasts: on\./)
+  expect((await run('cache', 'toasts off')).text).toBeUndefined()
+  expect((await run('session-band', '')).text).toMatch(/Toasts: on\./)
 })
 
 test('the A button is highlighted while on and explains itself on hover', async ($, on) => {
