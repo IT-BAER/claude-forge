@@ -4,9 +4,9 @@ A compact prompt-cache status band for Claude Code, with a cold-send guard, keep
 
 This is a fork of **Cache Keeper** by Nate Herk ([nateherkai/claude-code-mods](https://github.com/nateherkai/claude-code-mods)), MIT licensed. The cache logic, board, guard and handoff flow are his work. See [Changes from Cache Keeper](#changes-from-cache-keeper) for what this fork adds.
 
-<img src="screenshots/band.png" alt="session-band above the prompt, plan limits hover help open" width="686">
+<img src="screenshots/band.png" alt="session-band above the prompt" width="686">
 
-*The band above the prompt: cache warm for 60 minutes, 342k tokens in context, a cold rewrite would cost about $2.73, the session cost $13 so far, and the 5-hour and weekly plan limits.*
+*The band above the prompt: cache warm for 60 minutes, 253k tokens in context, a cold rewrite would cost about $2.03, the session cost $5.10 so far, and the 5-hour, weekly and Fable-only weekly plan limits.*
 
 ## Why
 
@@ -42,6 +42,10 @@ Start a new session afterwards.
 | `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used, each in its own colour. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow a daily budget: day n of 7 (counted from the reset) allows n/7 of the week, so day 1 allows 14.3 %. Red once today's budget is used, yellow at 80 % of it. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
 Hover `c`, `ctx`, `rwc`, `sc` or `cr` for an explanation above the band: what the label stands for in bold (`rwc = rewrite cost`), then the details on the lines below it, and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for one line per window with what it is and when it resets: `5h 5-hour window · resets 1:50pm in 2h15m`, weekly ones ending `· budget today 57.1%` in the window's colour. On a subscription the prices show up as usage against your limits, not as a bill.
+
+<img src="screenshots/hover-help.png" alt="Plan limits hover help above the band" width="686">
+
+*Hovering the plan limits: one line per window with its reset time, the countdown, and today's budget for the weekly windows.*
 
 ## Commands
 
