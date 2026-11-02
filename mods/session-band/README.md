@@ -4,7 +4,7 @@ A compact prompt-cache status band for Claude Code, with a cold-send guard, keep
 
 This is a fork of **Cache Keeper** by Nate Herk ([nateherkai/claude-code-mods](https://github.com/nateherkai/claude-code-mods)), MIT licensed. The cache logic, board, guard and handoff flow are his work. See [Changes from Cache Keeper](#changes-from-cache-keeper) for what this fork adds.
 
-<img src="screenshots/band.png" alt="session-band above the prompt" width="686">
+<img src="screenshots/band.png" alt="session-band above the prompt, plan limits hover help open" width="686">
 
 *The band above the prompt: cache warm for 60 minutes, 342k tokens in context, a cold rewrite would cost about $2.73, the session cost $13 so far, and the 5-hour and weekly plan limits.*
 
@@ -41,7 +41,7 @@ Start a new session afterwards.
 | `cr` | Cold restarts: how many sends rewrote an expired cache this session, and what they cost. Shown only after the first one. |
 | `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used, each in its own colour. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow a daily budget: day n of 7 (counted from the reset) allows n/7 of the week, so day 1 allows 14.3 %. Red once today's budget is used, yellow at 80 % of it. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
-Hover `c`, `ctx`, `rwc`, `sc` or `cr` for a one-line explanation above the band. Each starts with what the label stands for (`rwc = rewrite cost: ...`), and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for what each window is and when it resets: `5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h), budget today 57.1%`. On a subscription the prices show up as usage against your limits, not as a bill.
+Hover `c`, `ctx`, `rwc`, `sc` or `cr` for an explanation above the band: what the label stands for in bold (`rwc = rewrite cost`), then the details on the lines below it, and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for one line per window with what it is and when it resets: `5h 5-hour window · resets 1:50pm in 2h15m`, weekly ones ending `· budget today 57.1%` in the window's colour. On a subscription the prices show up as usage against your limits, not as a bill.
 
 ## Commands
 
@@ -103,7 +103,7 @@ Background work keeps A on when a turn ends without a handoff: a running subagen
 ## Changes from Cache Keeper
 
 - Short band labels (`c`, `rwc`, `sc`, `w`) so the band fits next to the prompt, session cost before the plan limits.
-- Hover help for the short labels. The help row opens above the band, so the hovered text does not move.
+- Hover help for the short labels: the key in bold, the details on their own lines. The help opens above the band, so the hovered text does not move.
 - Handoff files: when Claude writes a `session-handoff.md`, a `restart-packet.md` (also with a suffix, like `session-handoff-pve.md`) or a file under `handoffs/`, the band shows `handoff running` while Claude still works, and offers to clear and continue from that file once the turn ends. A message you send mid-turn does not drop it. Any header format works; only a header marked `status: consumed` (or another non-active status) is skipped. If a handoff turn ends on a short answer (a Stop hook added a tail), the last handoff file written in the session is used instead. The fresh chat gets a short "read this file" prompt instead of the whole text.
 - Renamed to `session-band`. Data lives in `~/.claude/mods-data/session-band/`.
 - Earlier versions of this fork were called `cache-status`. To switch, run `/plugin uninstall cache-status@claude-forge`, then install `session-band@claude-forge` and restart each chat. Nothing reads `~/.claude/mods-data/cache-status/` any more, so you can delete that folder once no chat runs the old mod.

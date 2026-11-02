@@ -432,19 +432,25 @@ function limitColor(l, at) {
   return used >= red ? 'red' : used >= yellow ? 'yellow' : null
 }
 
-// Each window's name and reset: "5h (5-hour window) resets 1:50pm (in 2h15m) · w (weekly, all models) resets Fri 9:00am (in 3d21h), budget today 57.1%"
+// One hover help line per window, as strings and Text props: "5h 5-hour window · resets 1:50pm in 2h15m",
+// a weekly one ending "· budget today 57.1%", the figure in the window's colour
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-function resetsText(limits, at) {
+function resetsLines(limits, at) {
   return limits.map((l) => {
-    const name = limitName(l) ? `${limitLabel(l)} (${limitName(l)})` : limitLabel(l)
-    if (!l.resetsAt) return name
+    const line = [{ bold: true, children: [limitLabel(l)] }]
+    const name = limitName(l)
+    if (!l.resetsAt) return name ? [...line, { dimColor: true, children: [` ${name}`] }] : line
     const t = Date.parse(l.resetsAt)
     const left = t - at
     const day = left >= DAY ? DAYS[new Date(t).getDay()] + ' ' : ''
     const span = left <= 0 ? 'due' : left >= DAY ? `in ${Math.floor(left / DAY)}d${Math.floor((left % DAY) / (60 * MIN))}h` : `in ${minutes(left)}`
+    line.push({ dimColor: true, children: [` ${name ? name + ' · ' : ''}resets `] }, { bold: true, children: [day + clock(t)] }, ' ', { color: 'claude', children: [span] })
     const budget = weekBudget(l, at)
-    return `${name} resets ${day}${clock(t)} (${span})${budget === null ? '' : `, budget today ${+budget.toFixed(1)}%`}`
-  }).join(' · ')
+    if (budget === null) return line
+    const color = limitColor(l, at)
+    const figure = `${+budget.toFixed(1)}%`
+    return [...line, { dimColor: true, children: [' · budget today '] }, color ? { color, children: [figure] } : figure]
+  })
 }
 
 function allLimits() {
@@ -1194,18 +1200,22 @@ export function register(on) {
     const right = Box({ flexDirection: 'row', columnGap: 2, children: rightParts })
     const mine = Box({ flexDirection: 'row', justifyContent: 'space-between', width: '100%', columnGap: 2, children: [left, right] })
     // Hover help rows sit above the band row, so revealing one leaves the hovered text in place.
-    const help = (scope, text) => Box({ display: 'none', hover: { scope, display: 'flex' }, children: [Text({ dimColor: true, italic: true, children: [text] })] })
+    // The key bold in the accent, then one indented row per line; a line is a string or a list of strings and Text props
+    const help = (scope, key, lines) => Box({ display: 'none', flexDirection: 'column', hover: { scope, display: 'flex' }, children: [
+      Text({ bold: true, color: 'claude', children: [key] }),
+      ...lines.map((line) => Box({ paddingLeft: 2, children: [Text({ children: (Array.isArray(line) ? line : [line]).map((p) => (typeof p === 'string' ? p : Text(p))) })] })),
+    ] })
+    const dim = (text) => ({ dimColor: true, children: [text] })
     const cacheHelp = { kept: `kept warm until ${clock(S.keepWarmUntil)}, ${S.pings} ping${S.pings === 1 ? '' : 's'} so far (${money(S.pingUsd)})`, warm: `warm, expires in ${minutes(st.left)}`, cooling: `cooling, expires in ${minutes(st.left)}`, cold: `cold for ${minutes(-st.left)}` }
     const tips = [
-      help('ck-c', `c = prompt cache: ${cacheHelp[st.kind] || 'state unknown'}${ttl ? ` (${ttl}m TTL)` : ''}; once cold, the next send writes the whole context again`),
-      help('ck-ctx', `ctx = context: ${tokens(S.ctx)} tokens in this session's context window${S.window ? ` of ${tokens(S.window)}` : ''}`),
-      help('ck-rewrite', `rwc = rewrite cost: estimated cost to write ${tokens(S.ctx)} of context into the cache again if it expires (cache write price${ttl ? `, ${ttl}m TTL` : ''})`),
-      help('ck-sc', 'sc = session cost: what this session has cost so far, at API list prices'),
-      help('ck-auto', `A = autonomous mode: ${auto ? 'on' : 'off'}. While on, each ready handoff is cleared and continued by itself, and Claude answers its own questions. A turn that ends without a handoff, or with the afk-shutdown end line, turns it off.`),
+      help('ck-c', 'c = prompt cache', [`${cacheHelp[st.kind] || 'state unknown'}${ttl ? ` (${ttl}m TTL)` : ''}`, [dim('once cold, the next send writes the whole context again')]]),
+      help('ck-ctx', 'ctx = context', [`${tokens(S.ctx)} tokens in this session's context window${S.window ? ` of ${tokens(S.window)}` : ''}`]),
+      help('ck-rewrite', 'rwc = rewrite cost', [[`estimated cost to write ${tokens(S.ctx)} of context into the cache again if it expires `, dim(`(cache write price${ttl ? `, ${ttl}m TTL` : ''})`)]]),
+      help('ck-sc', 'sc = session cost', ['what this session has cost so far, at API list prices']),
+      help('ck-auto', 'A = autonomous mode', [auto ? 'on' : 'off', 'While on, each ready handoff is cleared and continued by itself, and Claude answers its own questions.', [dim('A turn that ends without a handoff, or with the afk-shutdown end line, turns it off.')]]),
     ]
-    if (cold) tips.push(help('ck-cr', `cr = cold restarts: ${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`))
-    const resets = resetsText(limits, now)
-    if (resets) tips.push(help('ck-limits', 'plan limits: ' + resets))
+    if (cold) tips.push(help('ck-cr', 'cr = cold restarts', [`${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`]))
+    if (limits.length) tips.push(help('ck-limits', 'plan limits', resetsLines(limits, now)))
     return Box({ flexDirection: 'column', children: below ? [...tips, mine, below] : [...tips, mine] })
   })
 

@@ -1,5 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+const textOf = (n: any): string => (typeof n === 'string' ? n : (n?.children || []).map(textOf).join(''))
+// A hover help Box: the key row, then one row per line
+const linesOf = (box: any): string[] => (box?.children || []).map(textOf)
+const styleOf = (n: any) => n && { ...n, ...n.props }
+
 const BASE = 'D:/home/t/.claude/mods-data/session-band'
 const LIVE = `${BASE}/live/sess-1.json`
 const CMD = `${BASE}/commands/sess-1.json`
@@ -342,7 +347,19 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     expect(drawn.find((n) => n.type === 'Text' && n.children.join('') === ' ● 5h 48%')?.hover?.scope).toBe('ck-limits')
     expect(drawn.find((n) => n.type === 'Text' && n.children.join('') === ' w 24%')?.hover?.scope).toBe('ck-limits')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-    expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/^plan limits: 5h \(5-hour window\) resets \d{1,2}:\d\d[ap]m \(in 2h15m\) · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 3d21h\), budget today 57\.1%$/)
+    const lines = linesOf(help)
+    expect(lines.length).toBe(3)
+    expect(lines[0]).toBe('plan limits')
+    expect(lines[1]).toMatch(/^5h 5-hour window · resets \d{1,2}:\d\d[ap]m in 2h15m$/)
+    expect(lines[2]).toMatch(/^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 3d21h · budget today 57\.1%$/)
+    expect(styleOf(help.children[0])).toMatchObject({ bold: true, color: 'claude' })
+    const row = all(help.children[1]).filter((n) => n.type === 'Text')
+    const part = (t: string | RegExp) => styleOf(row.find((n) => typeof t === 'string' ? n.children.join('') === t : t.test(n.children.join(''))))
+    expect(part('5h')).toMatchObject({ bold: true })
+    expect(part(' 5-hour window · resets ')).toMatchObject({ dimColor: true })
+    expect(part(/^\d{1,2}:\d\d[ap]m$/)).toMatchObject({ bold: true })
+    expect(part('in 2h15m')).toMatchObject({ color: 'claude' })
+    expect(all(help).some((n) => n.props?.italic)).toBe(false)
     await ui.unmount()
   }
 })
@@ -377,7 +394,9 @@ test('each plan limit gets its own colour, weekly ones by today\'s share of the 
   expect(style(' sw 30%')).toMatchObject({ dimColor: true })
   expect(text(' w 15%')?.hover?.scope).toBe('ck-limits')
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · w \(weekly, all models\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 6d10h\), budget today 14\.3% · /)
+  expect(linesOf(help).some((l) => /^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 6d10h · budget today 14\.3%$/.test(l))).toBe(true)
+  // the budget figure takes the window's colour: 15 % used against 14.3 % allowed is red
+  expect(styleOf(all(help).find((n) => n.type === 'Text' && n.children.join('') === '14.3%'))).toMatchObject({ color: 'red' })
   await ui.unmount()
   // the footer lists the coloured windows
   const footer = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'SessionMode', props: { modes: [] } as any })
@@ -419,7 +438,7 @@ test('per-model weekly windows (Fable) come from the usage endpoint into the ban
   const drawn = all(await ui.drawn())
   expect(drawn.some((n) => n.type === 'Text' && n.children.join('') === ' fw 33%')).toBe(true)
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(all(help).find((n) => n.type === 'Text')?.children.join('')).toMatch(/ · fw \(weekly, Fable only\) resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m \(in 2d5h\), budget today 71\.4%$/)
+  expect(linesOf(help).at(-1)).toMatch(/^fw weekly, Fable only · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 2d5h · budget today 71\.4%$/)
   await ui.unmount()
   // within five minutes the endpoint is not asked again
   await $.turn.start({ turnId: 't1' } as any)
@@ -442,7 +461,7 @@ test('the band keeps cooling and cold restarts short and puts the full text in h
   await step.result
   await clock.advance(57 * 60000)
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
-  const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
+  const helpText = (drawn: any[], scope: string) => linesOf(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).join('\n')
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const drawn = all(await ui.drawn())
@@ -450,10 +469,10 @@ test('the band keeps cooling and cold restarts short and puts the full text in h
     expect(texts).toContain('◐ c 3m')
     const band = texts.filter((t) => /^([◐●○◆]| ●)/.test(t))
     expect(band.some((t) => /cools in|cold restart/.test(t))).toBe(false)
-    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache: cooling, expires in 3m \(60m TTL\);/)
+    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache\ncooling, expires in 3m \(60m TTL\)\nonce cold, /)
     const cr = drawn.find((n) => n.type === 'Text' && /^ ● cr 1 \$\d+\.\d\d$/.test(String(n.children.join(''))))
     expect(cr?.hover?.scope).toBe('ck-cr')
-    expect(helpText(drawn, 'ck-cr')).toMatch(/^cr = cold restarts: 1 send rewrote the expired cache this session, \$\d+\.\d\d in total$/)
+    expect(helpText(drawn, 'ck-cr')).toMatch(/^cr = cold restarts\n1 send rewrote the expired cache this session, \$\d+\.\d\d in total$/)
     await ui.unmount()
   }
 })
@@ -467,22 +486,22 @@ test('kept warm, rewrite cost and plan limits stay short, and band segments wrap
   }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
   await $.command.run({ command: 'session-band', args: 'keepwarm 2' } as any)
   const all = (n: any): any[] => (n && typeof n === 'object' ? [n, ...(n.children || []).flatMap(all)] : [])
-  const helpText = (drawn: any[], scope: string) => all(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).find((n) => n.type === 'Text')?.children.join('')
+  const helpText = (drawn: any[], scope: string) => linesOf(drawn.find((n) => n.type === 'Box' && n.hover?.scope === scope && n.hover?.display === 'flex')).join('\n')
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
     const drawn = all(await ui.drawn())
     const texts = drawn.filter((n) => n.type === 'Text')
     const kept = texts.find((n) => /^◆ c kept \d{1,2}:\d\d[ap]m$/.test(n.children.join('')))
     expect(kept?.hover?.scope).toBe('ck-c')
-    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache: kept warm until \d{1,2}:\d\d[ap]m, 0 pings so far \(\$0\)/)
+    expect(helpText(drawn, 'ck-c')).toMatch(/^c = prompt cache\nkept warm until \d{1,2}:\d\d[ap]m, 0 pings so far \(\$0\)/)
     expect(texts.some((n) => /^ ● rwc \$\d+\.\d\d$/.test(n.children.join('')))).toBe(true)
     expect(texts.some((n) => n.children.join('') === ' ● 5h 9%')).toBe(true)
     expect(texts.some((n) => n.children.join('') === ' w 10%')).toBe(true)
     expect(texts.find((n) => n.children.join('') === ' ● ctx 90.0k')?.hover?.scope).toBe('ck-ctx')
-    expect(helpText(drawn, 'ck-ctx')).toBe("ctx = context: 90.0k tokens in this session's context window of 200k")
-    expect(helpText(drawn, 'ck-rewrite')).toMatch(/^rwc = rewrite cost: /)
-    expect(helpText(drawn, 'ck-sc')).toMatch(/^sc = session cost: /)
-    expect(helpText(drawn, 'ck-limits')).toBe('plan limits: 5h (5-hour window) · w (weekly, all models)')
+    expect(helpText(drawn, 'ck-ctx')).toBe("ctx = context\n90.0k tokens in this session's context window of 200k")
+    expect(helpText(drawn, 'ck-rewrite')).toMatch(/^rwc = rewrite cost\nestimated cost to write 90.0k of context /)
+    expect(helpText(drawn, 'ck-sc')).toMatch(/^sc = session cost\nwhat this session has cost so far/)
+    expect(helpText(drawn, 'ck-limits')).toBe('plan limits\n5h 5-hour window\nw weekly, all models')
     expect(drawn.find((n) => n.type === 'Box' && n.children?.some((c: any) => c === kept))?.props?.flexWrap).toBe('wrap')
     await ui.unmount()
   }
@@ -826,7 +845,7 @@ test('the A button is highlighted while on and explains itself on hover', async 
     const button = drawn.find((n) => n.type === 'Button' && n.props.key === 'auto')
     const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-auto' && n.hover?.display === 'flex')
     await ui.unmount()
-    return { button, keys: drawn.filter((n) => n.type === 'Button').map((n) => n.props.key), help: all(help).find((n) => n.type === 'Text')?.children.join('') }
+    return { button, keys: drawn.filter((n) => n.type === 'Button').map((n) => n.props.key), help: linesOf(help).join('\n') }
   }
   for (const surface of ['terminal', 'desktop'] as const) {
     const off = await look(surface)
@@ -837,7 +856,7 @@ test('the A button is highlighted while on and explains itself on hover', async 
     expect(off.button.props.plain).toBeUndefined()
     expect(off.button.props.variant).toBe('secondary')
     expect(off.button.props.dimColor).toBe(true)
-    expect(off.help).toMatch(/^A = autonomous mode: off\./)
+    expect(off.help).toMatch(/^A = autonomous mode\noff\n/)
   }
   await toggle()
   expect(toasts.some((t) => /^Autonomous mode on/.test(t))).toBe(true)
@@ -845,6 +864,6 @@ test('the A button is highlighted while on and explains itself on hover', async 
     const lit = await look(surface)
     expect(lit.button.props.variant).toBe('primary')
     expect(lit.button.props.dimColor).toBe(false)
-    expect(lit.help).toMatch(/^A = autonomous mode: on\./)
+    expect(lit.help).toMatch(/^A = autonomous mode\non\n/)
   }
 })
