@@ -20,6 +20,8 @@ async function start($: any, on: any, set: (w: any) => void = () => {}) {
     fetched: [] as string[],
     ran: [] as string[][],
     toasts: [] as string[],
+    // What the engine answers beneath the mod: core's own drawing, or another mod's band
+    below: 'engine' as 'engine' | 'band',
   }
   set(w)
   const clock = mock.clock(on, { now: NOW })
@@ -35,8 +37,7 @@ async function start($: any, on: any, set: (w: any) => void = () => {}) {
     w.fetched.push(e.url)
     return { value: { status: w.feed.status, ok: w.feed.status === 200, headers: {}, text: w.feed.text } }
   })
-  // Stands for the engine's own band beneath the mod
-  on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  on('ui.render', ($: any, e: any) => (w.below === 'band' ? $.ui.resolve(e).Box({ children: [] }) : { type: 'engine', ref: 0 }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', (_: any, e: any) => { w.toasts.push(e.text); return { value: undefined } })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
@@ -77,12 +78,25 @@ test('the buttons sit at the right edge, the text at the left', async ($, on) =>
   const offer = halves(await ui.drawn())
   expect(offer?.left).toBe('Claude Desktop 4.4300.0 is available (installed 4.4212.0)')
   expect(offer?.right).toEqual(['later', 'update'])
-  // One row of space between this line and the band drawn beneath it
-  expect((await ui.drawn()).props).toMatchObject({ flexDirection: 'column', rowGap: 1 })
   await ui.press({ key: 'update' })
   const confirm = halves(await ui.drawn())
   expect(confirm?.left).toContain('Installing closes every Claude Desktop window')
   expect(confirm?.right).toEqual(['cancel', 'install'])
+})
+
+test('a row of space separates the line from a band beneath it, none from core\'s own drawing', async ($, on) => {
+  await start($, on)
+  const { ui } = await line($)
+  const drawn: any = await ui.drawn()
+  expect(drawn.props.rowGap ?? 0).toBe(0)
+  expect(drawn.children.at(-1)).toMatchObject({ type: 'engine' })
+  await ui.unmount()
+})
+
+test('a band beneath the line gets one row of space', async ($, on) => {
+  await start($, on, (w) => { w.below = 'band' })
+  const { ui } = await line($)
+  expect((await ui.drawn()).props).toMatchObject({ flexDirection: 'column', rowGap: 1 })
 })
 
 for (const [name, set] of [

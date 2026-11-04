@@ -235,6 +235,8 @@ export const register = (on, options) => {
     const left = Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children: texts })
     const right = Box({ flexDirection: 'row', columnGap: 2, children: buttons })
     const mine = Box({ flexDirection: 'row', justifyContent: 'space-between', width: '100%', columnGap: 2, children: [left, right] })
-    return Box({ flexDirection: 'column', rowGap: 1, children: below ? [mine, below] : [mine] })
+    // Space only before another mod's band: core's own drawing ({ type: 'engine' }) is often empty
+    const band = below && below.type !== 'engine'
+    return Box({ flexDirection: 'column', rowGap: band ? 1 : 0, children: below ? [mine, below] : [mine] })
   })
 }
