@@ -329,6 +329,19 @@ test('a denied edit of a handoff file is not a handoff write', async ($, on) => 
   await $.turn.complete({ reason: 'answer', answer: 'The edit was denied.', durationMs: 1, isAborted: false, turnId: 't1' } as any)
   expect(live().handoff).toBe('idle')
 })
+test('a row below the band gets a half-cell gap on desktop and none in the terminal', async ($, on) => {
+  const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
+  await start($, on, (on) => {
+    on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 90000, window: 200000 }, rateLimits: [], cost: { usd: 1 } } }))
+    on('session.messages', () => ({ value: [{ role: 'assistant', text: 'ok', toolUses: [] }] }))
+    on('ui.render', ($: any, e: any) => $.ui.resolve(e).Box({ children: [] }))
+  }, { 'D:/home/t/.claude/projects/d--VSC-demo/sess-1.jsonl': transcript })
+  for (const [surface, gap] of [['terminal', 0], ['desktop', 0.5]] as const) {
+    const ui = await $.ui.mount({ plugin: 'session-band', surface, component: 'AbovePrompt', props: {} as any })
+    expect(((await ui.drawn()) as any).props.rowGap).toBe(gap)
+    await ui.unmount()
+  }
+})
 test('hovering the plan limits shows when each window resets', async ($, on) => {
   const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
   const limits = [

@@ -1216,7 +1216,9 @@ export function register(on) {
     ]
     if (cold) tips.push(help('ck-cr', 'cr = cold restarts', [`${cold} send${cold === 1 ? '' : 's'} rewrote the expired cache this session, ${coldUsd} in total`]))
     if (limits.length) tips.push(help('ck-limits', 'plan limits', resetsLines(limits, now)))
-    return Box({ flexDirection: 'column', children: below ? [...tips, mine, below] : [...tips, mine] })
+    // Desktop draws the framed A button taller than the text, so a row below would touch it.
+    // Step names ('sm') are refused by the engine; a whole cell would waste a terminal row.
+    return Box({ flexDirection: 'column', rowGap: e.surface === 'desktop' ? 0.5 : 0, children: below ? [...tips, mine, below] : [...tips, mine] })
   })
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
