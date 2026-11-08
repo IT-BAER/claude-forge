@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { commandSuggestions } from '../hooks/register.mjs'
 
 const textOf = (n: any): string => (typeof n === 'string' ? n : (n?.children || []).map(textOf).join(''))
 // A hover help Box: the key row, then one row per line
@@ -828,7 +829,7 @@ test('with A on, each prompt tells Claude nobody is at the keyboard and question
 
 test('/session-band toasts off mutes the band\'s toasts, and /session-band toasts on brings them back', async ($, on) => {
   const { toggle, toasts } = await startAuto($, on)
-  expect(((await $.command.run({ command: 'session-band', args: 'toasts off' } as any)) as any).text).toMatch(/Toasts: off/)
+  expect(((await $.command.run({ command: 'session-band', args: 'toasts off' } as any)) as any).text).toMatch(/Toasts: off /)
   const before = toasts.length
   await toggle()
   expect(toasts.length).toBe(before)
@@ -837,11 +838,43 @@ test('/session-band toasts off mutes the band\'s toasts, and /session-band toast
   expect(toasts.slice(before)).toEqual(['Autonomous mode off.'])
 })
 
+test('/session-band names notifications in its description and starts its hint with toasts', async ($, on) => {
+  const specs: any[] = []
+  await start($, on, (on) => { on('command.register', (_: any, e: any) => { specs.push(e); return { value: { command: e.name } } }) })
+  const spec = specs.find((s) => s.name === 'session-band')
+  expect(spec.description).toMatch(/notifications/)
+  expect(spec.argumentHint).toMatch(/^\[toasts on\|off\]/)
+})
+
+test('/session-band status says how to turn the notification toasts off and the alerts on', async ($, on) => {
+  await start($, on)
+  const text = ((await $.command.run({ command: 'session-band', args: '' } as any)) as any).text
+  expect(text).toMatch(/Toasts: on .*Turn off: \/session-band toasts off\./)
+  expect(text).toMatch(/Alerts: off .*Turn on: \/session-band alerts on\./)
+  const off = ((await $.command.run({ command: 'session-band', args: 'toasts off' } as any)) as any).text
+  expect(off).toMatch(/Toasts: off .*Turn on: \/session-band toasts on\./)
+})
+
+test('typing /session-band and a letter suggests the subcommands with what they do', () => {
+  const at = (text: string) => commandSuggestions(text, text.length, 'session-band')
+  expect(at('/session-band t').map((s) => s.text)).toEqual(['toasts off', 'toasts on', 'ttl auto', 'ttl 5', 'ttl 60'])
+  expect(at('/session-band t')[0]!.description).toMatch(/Mute every band notification/)
+  expect(at('/session-band toasts o').map((s) => s.text)).toEqual(['off', 'on'])
+  expect(at('/session-band ttl ').length).toBe(0)
+  expect(at('/session-band ttl 6').map((s) => s.text)).toEqual(['60'])
+  expect(at('/session-band k').map((s) => s.text)).toEqual(['keepwarm', 'keepwarm off'])
+  expect(at('/session-band toasts off x')).toEqual([])
+  expect(at('/session-band')).toEqual([])
+  expect(at('/other t')).toEqual([])
+  expect(at('/session-band board').map((s) => s.text)).toEqual([])
+  expect(commandSuggestions('/ck-session-band a', 18, 'ck-session-band').map((s) => s.text)).toEqual(['alerts on', 'alerts off'])
+})
+
 test('/session-band runs status, board and handoff as subcommands, and the old /cache is gone', async ($, on) => {
   const { clock, ran } = await start($, on, (on) => { on('session.surface', () => ({ value: null })) })
   const run = async (command: string, args: string) => ((await $.command.run({ command, args } as any)) as any) || {}
   const status = await run('session-band', '')
-  expect(status.text).toMatch(/Toasts: on\./)
+  expect(status.text).toMatch(/Toasts: on /)
   expect(status.text).toMatch(/\/session-band toasts \[on\|off\]/)
   expect(status.text).toMatch(/\/session-band board/)
   expect((await run('session-band', 'board')).text).toMatch(/^Sessions on this machine:/)
@@ -849,9 +882,9 @@ test('/session-band runs status, board and handoff as subcommands, and the old /
   expect((await run('session-band', 'handoff')).text).toMatch(/^Running the session handoff/)
   await clock.advance(100)
   expect(ran).toContain('session-handoff')
-  expect((await run('session-band', 'nonsense')).text).toMatch(/Toasts: on\./)
+  expect((await run('session-band', 'nonsense')).text).toMatch(/Toasts: on /)
   expect((await run('cache', 'toasts off')).text).toBeUndefined()
-  expect((await run('session-band', '')).text).toMatch(/Toasts: on\./)
+  expect((await run('session-band', '')).text).toMatch(/Toasts: on /)
 })
 
 test('the A button is highlighted while on and explains itself on hover', async ($, on) => {

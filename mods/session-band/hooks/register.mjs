@@ -851,8 +851,10 @@ function statusText() {
   if (S.keepWarm) lines.push(`Keep warm is on until ${clock(S.keepWarmUntil)}: ${S.pings} ping(s), ${money(S.pingUsd)} so far.`)
   if (allLimits().length) lines.push(`Plan limits used: ${limitsText(allLimits())}.`)
   lines.push(`Session cost so far: ${money(S.costUsd)}. Cold restarts this session: ${S.coldRestarts.length} (${money(S.coldRestarts.reduce((a, c) => a + c.usd, 0))}).`)
-  lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens. Alerts: ${settings.alerts ? 'on' : 'off'}. Toasts: ${settings.toasts ? 'on' : 'off'}.`)
   const n = names.cmd
+  lines.push(`Toasts: ${settings.toasts ? 'on' : 'off'} (every band notification, errors included). Turn ${settings.toasts ? 'off' : 'on'}: /${n} toasts ${settings.toasts ? 'off' : 'on'}.`)
+  lines.push(`Alerts: ${settings.alerts ? 'on' : 'off'} (a big cache about to go cold, another chat waiting on you). Turn ${settings.alerts ? 'off' : 'on'}: /${n} alerts ${settings.alerts ? 'off' : 'on'}.`)
+  lines.push(`Cold-send guard: ${settings.guard ? 'on' : 'off'} for contexts over ${tokens(settings.bigTokens)} tokens.`)
   lines.push(`Settings: /${n} ttl 5|60|auto, /${n} guard on|off, /${n} big 150k, /${n} alerts [on|off], /${n} toasts [on|off] (no value toggles). Also /${n} keepwarm [hours|off], /${n} board, /${n} handoff [continue].`)
   return lines.join('\n')
 }
@@ -896,6 +898,36 @@ async function settingsCommand($, args) {
   return { text: statusText() }
 }
 
+// Typeahead rows for /session-band: a first word writes the whole subcommand, a second one its value
+const SUBCOMMANDS = [
+  ['toasts off', 'Mute every band notification (toast), errors included'],
+  ['toasts on', 'Show band notifications again'],
+  ['alerts on', 'Toast before a big cache goes cold and when another chat waits on you'],
+  ['alerts off', 'Stop the cold-cache and waiting-chat toasts'],
+  ['keepwarm', "Keep this chat's cache warm, 4 hours unless you add hours"],
+  ['keepwarm off', 'Stop keeping the cache warm'],
+  ['board', 'Every local chat in one pane'],
+  ['handoff', 'Write a session handoff, then clear and continue'],
+  ['handoff continue', 'Clear this chat and continue with the ready handoff'],
+  ['guard on', 'Ask before a message rewrites a big cold cache'],
+  ['guard off', 'Send to a big cold cache without asking'],
+  ['big 150k', 'Context size from which the guard and alerts apply'],
+  ['ttl auto', 'Cache window as the session reports it'],
+  ['ttl 5', 'Treat the cache window as 5 minutes'],
+  ['ttl 60', 'Treat the cache window as 60 minutes'],
+]
+const VALUES = { toasts: ['off', 'on'], alerts: ['on', 'off'], guard: ['on', 'off'], ttl: ['auto', '5', '60'], keepwarm: ['off', '1', '4', '8'], handoff: ['continue'] }
+
+export function commandSuggestions(text, cursor, cmd) {
+  const m = String(text).slice(0, cursor).match(new RegExp(`^/${cmd}\\s+(.*)$`, 'i'))
+  if (!m) return []
+  const words = m[1].split(/\s+/)
+  const token = words[words.length - 1].toLowerCase()
+  if (!token) return []
+  const rows = words.length === 1 ? SUBCOMMANDS : words.length === 2 ? (VALUES[words[0].toLowerCase()] || []).map((v) => [v]) : []
+  return rows.filter(([t]) => t.startsWith(token) && t !== token).map(([t, d]) => (d ? { text: t, description: d } : { text: t }))
+}
+
 async function keepwarmCommand($, arg) {
   if (arg === 'off' || (arg === '' && S.keepWarm)) {
     stopKeepWarm($, 'turned off')
@@ -932,7 +964,7 @@ export function register(on) {
     await loadSettings($)
     await readRecording($)
     // immediate: one flag covers every subcommand; each one is safe mid-turn
-    names.cmd = (await registerCommand($, 'session-band', 'Session Band: status and settings, keepwarm, board, handoff', '[keepwarm [hours|off]] [board] [handoff [continue]] [ttl|guard|big|alerts|toasts ...]', true)) || names.cmd
+    names.cmd = (await registerCommand($, 'session-band', 'Session Band: status, notifications (toasts, alerts), keepwarm, board, handoff', '[toasts on|off] [alerts on|off] [keepwarm|board|handoff|guard|ttl|big ...]', true)) || names.cmd
     $.clock.every(HEARTBEAT_EVERY, () => tick($).catch(() => {}))
     $.clock.every(OUTSIDE_EVERY, () => outsideStep($).catch(() => {}))
     // Run the mods below first: the startup command list misses commands they register late.
@@ -1145,6 +1177,12 @@ export function register(on) {
     if (sub === 'keepwarm') return keepwarmCommand($, rest)
     if (sub === 'board') return boardCommand($)
     return settingsCommand($, args)
+  })
+
+  on('prompt.autocomplete', async ($, e, next) => {
+    const mine = commandSuggestions(e.text, e.cursor, names.cmd)
+    if (!mine.length) return next(e)
+    return { suggestions: [...(await next(e)).suggestions, ...mine] }
   })
 
   on('ui.close', async ($, e, next) => {

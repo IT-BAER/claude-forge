@@ -49,14 +49,14 @@ Hover `c`, `ctx`, `rwc`, `sc` or `cr` for an explanation above the band: what th
 
 ## Commands
 
-All commands are subcommands of `/session-band`. It runs at once, also while Claude works.
+All commands are subcommands of `/session-band`. It runs at once, also while Claude works. Type `/session-band ` and the first letter of a subcommand: the typeahead lists the matching subcommands with what each does, and after `toasts`, `alerts`, `guard`, `ttl`, `keepwarm` or `handoff` their values.
 
 - `/session-band keepwarm [hours|off]` keeps this chat's cache warm, 4 hours by default, with a small ping shortly before it would expire.
 - Cold-send guard: a message into a chat over 150k tokens after its cache expired asks first: Send anyway, Compact first, or Cancel.
 - `/session-band board` shows every local chat in one pane: waiting on you first, then working, then the ones whose cache cools soonest.
 - `/session-band handoff` (or the `handoff` button) runs the bundled `session-handoff` skill, then clears the chat and starts the fresh one from the handoff. Typed while Claude works, the skill is queued until the turn ends; `/session-band handoff continue` then says to wait and does nothing.
 - The `A` button at the right end of the band toggles [autonomous mode](#autonomous-mode-a): handoffs are cleared and continued without you.
-- `/session-band` shows status and settings: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`, `toasts [on|off]`.
+- `/session-band` shows status and settings, including whether toasts and alerts are on and the exact command to switch each: `ttl 5|60|auto`, `guard on|off`, `big 150k`, `alerts [on|off]`, `toasts [on|off]`.
 - Alerts are off by default. They are the unasked toasts: a big cache about to go cold, and another chat waiting on you. `/session-band alerts` toggles them.
 - Toasts are on by default. `/session-band toasts off` mutes every toast of the band, errors included; the band and footer still show the state. `/session-band toasts` toggles them.
 - Earlier versions had `/cache`, `/keepwarm`, `/board` and `/handoff`. They are gone; use the subcommands above.
