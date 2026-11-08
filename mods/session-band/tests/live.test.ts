@@ -368,7 +368,7 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
     expect(lines.length).toBe(3)
     expect(lines[0]).toBe('plan limits')
     expect(lines[1]).toMatch(/^5h 5-hour window · resets \d{1,2}:\d\d[ap]m in 2h15m$/)
-    expect(lines[2]).toMatch(/^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 3d21h · budget now 44\.6%$/)
+    expect(lines[2]).toMatch(/^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 3d21h · budget today 57\.1%$/)
     expect(styleOf(help.children[0])).toMatchObject({ bold: true, color: 'claude' })
     const row = all(help.children[1]).filter((n) => n.type === 'Text')
     const part = (t: string | RegExp) => styleOf(row.find((n) => typeof t === 'string' ? n.children.join('') === t : t.test(n.children.join(''))))
@@ -381,14 +381,14 @@ test('hovering the plan limits shows when each window resets', async ($, on) => 
   }
 })
 
-test('each plan limit gets its own colour, weekly ones by this hour\'s share of the week', async ($, on) => {
+test('each plan limit gets its own colour, weekly ones by today\'s share of the week', async ($, on) => {
   const transcript = JSON.stringify({ type: 'assistant', timestamp: new Date(NOW - 60000).toISOString(), message: { role: 'assistant' } })
   const at = (min: number) => new Date(NOW + min * 60000).toISOString()
-  const day1 = at((6 * 24 + 10) * 60) // 154 full hours left: hour 14 of 168, budget 8.3 %, yellow from 6.7 %
+  const day1 = at((6 * 24 + 10) * 60) // 6 full days left: budget 1/7 = 14.3 %
   const limits = [
     { kind: 'five_hour', percentUsed: 85, resetsAt: at(135) },
     { kind: 'seven_day', percentUsed: 15, resetsAt: day1 },
-    { kind: 'weekly_fable', model: 'Fable', percentUsed: 7, resetsAt: day1 },
+    { kind: 'weekly_fable', model: 'Fable', percentUsed: 12, resetsAt: day1 },
     { kind: 'weekly_sonnet', model: 'Sonnet', percentUsed: 30, resetsAt: at((4 * 24 + 1) * 60) },
   ]
   let modes: any[] = []
@@ -407,19 +407,19 @@ test('each plan limit gets its own colour, weekly ones by this hour\'s share of 
   const style = (t: string) => { const n = text(t); return n && { ...n, ...n.props } }
   expect(style(' ● 5h 85%')).toMatchObject({ color: 'yellow' })
   expect(style(' w 15%')).toMatchObject({ color: 'red', bold: true })
-  expect(style(' fw 7%')).toMatchObject({ color: 'yellow' })
+  expect(style(' fw 12%')).toMatchObject({ color: 'yellow' })
   expect(style(' sw 30%')).toMatchObject({ dimColor: true })
   expect(text(' w 15%')?.hover?.scope).toBe('ck-limits')
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(linesOf(help).some((l) => /^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 6d10h · budget now 8\.3%$/.test(l))).toBe(true)
-  // the budget figure takes the window's colour: 15 % used against 8.3 % allowed is red
-  expect(styleOf(all(help).find((n) => n.type === 'Text' && n.children.join('') === '8.3%'))).toMatchObject({ color: 'red' })
+  expect(linesOf(help).some((l) => /^w weekly, all models · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 6d10h · budget today 14\.3%$/.test(l))).toBe(true)
+  // the budget figure takes the window's colour: 15 % used against 14.3 % allowed is red
+  expect(styleOf(all(help).find((n) => n.type === 'Text' && n.children.join('') === '14.3%'))).toMatchObject({ color: 'red' })
   await ui.unmount()
   // the footer lists the coloured windows
   const footer = await $.ui.mount({ plugin: 'session-band', surface: 'terminal', component: 'SessionMode', props: { modes: [] } as any })
   await footer.drawn()
   await footer.unmount()
-  expect(modes).toEqual(['5h 85% · w 15% · fw 7%'])
+  expect(modes).toEqual(['5h 85% · w 15% · fw 12%'])
 })
 
 test('per-model weekly windows (Fable) come from the usage endpoint into the band, hover and live file', async ($, on) => {
@@ -455,7 +455,7 @@ test('per-model weekly windows (Fable) come from the usage endpoint into the ban
   const drawn = all(await ui.drawn())
   expect(drawn.some((n) => n.type === 'Text' && n.children.join('') === ' fw 33%')).toBe(true)
   const help = drawn.find((n) => n.type === 'Box' && n.hover?.scope === 'ck-limits' && n.hover?.display === 'flex')
-  expect(linesOf(help).at(-1)).toMatch(/^fw weekly, Fable only · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 2d5h · budget now 68\.5%$/)
+  expect(linesOf(help).at(-1)).toMatch(/^fw weekly, Fable only · resets [A-Z][a-z]{2} \d{1,2}:\d\d[ap]m in 2d5h · budget today 71\.4%$/)
   await ui.unmount()
   // within five minutes the endpoint is not asked again
   await $.turn.start({ turnId: 't1' } as any)

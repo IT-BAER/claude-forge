@@ -39,13 +39,13 @@ Start a new session afterwards.
 | `rwc` | Rewrite cost: what writing the context into the cache again would cost if it expires. |
 | `sc` | Session cost so far, at API list prices. |
 | `cr` | Cold restarts: how many sends rewrote an expired cache this session, and what they cost. Shown only after the first one. |
-| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used, each in its own colour. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow an hourly budget: hour n of 168 (counted from the reset) allows n/168 of the week, so the first hour allows 0.6 % and the end of day 1 allows 14.3 %. Red once this hour's budget is used, yellow at 80 % of it. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
+| `5h`, `w`, `fw` | 5-hour, weekly and per-model weekly (`fw` for Fable, the model's initial) plan limits used, each in its own colour. `5h`: yellow at 80 %, red at 95 %. Weekly windows follow a daily budget: day n of 7 (counted from the reset) allows n/7 of the week, so day 1 allows 14.3 %. Red once today's budget is used, yellow at 80 % of it. The per-model windows come from the plan usage endpoint (`/api/oauth/usage`, asked at most every 5 minutes), because the mod API does not pass them. |
 
-Hover `c`, `ctx`, `rwc`, `sc` or `cr` for an explanation above the band: what the label stands for in bold (`rwc = rewrite cost`), then the details on the lines below it, and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for one line per window with what it is and when it resets: `5h 5-hour window · resets 1:50pm in 2h15m`, weekly ones ending `· budget now 44.6%` in the window's colour. On a subscription the prices show up as usage against your limits, not as a bill.
+Hover `c`, `ctx`, `rwc`, `sc` or `cr` for an explanation above the band: what the label stands for in bold (`rwc = rewrite cost`), then the details on the lines below it, and `c` names the state in full (kept, warm, cooling, cold). Hover the plan limits for one line per window with what it is and when it resets: `5h 5-hour window · resets 1:50pm in 2h15m`, weekly ones ending `· budget today 57.1%` in the window's colour. On a subscription the prices show up as usage against your limits, not as a bill.
 
 <img src="screenshots/hover-help.png" alt="Plan limits hover help above the band" width="686">
 
-*Hovering the plan limits: one line per window with its reset time, the countdown, and this hour's budget for the weekly windows.*
+*Hovering the plan limits: one line per window with its reset time, the countdown, and today's budget for the weekly windows.*
 
 ## Commands
 
