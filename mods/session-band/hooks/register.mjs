@@ -415,16 +415,17 @@ function limitsText(limits, sep = ' · ') {
   return limits.map((l) => `${limitLabel(l)} ${Math.round(l.percentUsed)}%`).join(sep)
 }
 
-// A weekly window's budget up to the end of today: day n of 7, counted from its reset, allows n/7 of it.
+// A weekly window's budget up to the end of this hour: hour n of 168, counted from its reset, allows n/168 of it.
 // null for the 5-hour and spend windows, and for a weekly window without a reset time.
-const DAY = 24 * 60 * MIN
+const HOUR = 60 * MIN
+const DAY = 24 * HOUR
 function weekBudget(l, at) {
   if ((l.kind !== 'seven_day' && !l.model) || !l.resetsAt) return null
-  const daysLeft = Math.min(6, Math.max(0, Math.floor((Date.parse(l.resetsAt) - at) / DAY)))
-  return ((7 - daysLeft) / 7) * 100
+  const hoursLeft = Math.min(167, Math.max(0, Math.floor((Date.parse(l.resetsAt) - at) / HOUR)))
+  return ((168 - hoursLeft) / 168) * 100
 }
 
-// Red at today's budget, yellow at 80 % of it; without a budget red at 95 %, yellow at 80 %
+// Red at this hour's budget, yellow at 80 % of it; without a budget red at 95 %, yellow at 80 %
 function limitColor(l, at) {
   const used = l.percentUsed || 0
   const budget = weekBudget(l, at)
@@ -433,7 +434,7 @@ function limitColor(l, at) {
 }
 
 // One hover help line per window, as strings and Text props: "5h 5-hour window · resets 1:50pm in 2h15m",
-// a weekly one ending "· budget today 57.1%", the figure in the window's colour
+// a weekly one ending "· budget now 44.6%", the figure in the window's colour
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 function resetsLines(limits, at) {
   return limits.map((l) => {
@@ -449,7 +450,7 @@ function resetsLines(limits, at) {
     if (budget === null) return line
     const color = limitColor(l, at)
     const figure = `${+budget.toFixed(1)}%`
-    return [...line, { dimColor: true, children: [' · budget today '] }, color ? { color, children: [figure] } : figure]
+    return [...line, { dimColor: true, children: [' · budget now '] }, color ? { color, children: [figure] } : figure]
   })
 }
 
