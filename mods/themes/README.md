@@ -1,6 +1,6 @@
 # themes
 
-A Claude Code mod with color themes for the Claude desktop and mobile apps. `/themes` switches between them, and the choice is kept for later sessions.
+A Claude Code mod with color themes for Claude Desktop. `/themes` switches between them, and the choice is kept for later sessions.
 
 <img src="screenshots/github-dark.png" alt="Claude Desktop session window in the GitHub Dark theme: code block with GitHub highlighting, a table, the session band and the prompt box" width="686">
 
@@ -34,7 +34,7 @@ Dark mode only. With the app in light mode, the app keeps its own light colors. 
 
 ### Status in Claude Desktop
 
-Tested on 14 November 2026 with Claude Desktop 5.11492.5.0 (Code tab, Claude Code 2.1.325), by capturing the window and comparing it with github.com. Desktop draws one look for the whole window. After a Desktop restart the look drew at startup; before the restart, a newly opened session alone did not bring it. The mobile apps were not tested.
+Tested on 14 November 2026 with Claude Desktop 5.11492.5.0 (Code tab, Claude Code 2.1.325), by capturing the window and comparing it with github.com. Desktop draws one look for the whole window. After a Desktop restart the look drew at startup; before the restart, a newly opened session alone did not bring it.
 
 Where Desktop's fixed design differs from github.com:
 

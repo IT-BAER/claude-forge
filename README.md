@@ -14,7 +14,7 @@ A mod adds a pane, a band, a command or a look to Claude Code itself.
 | [`session-band`](mods/session-band) | Prompt cache band above the prompt (cache time, context, rewrite cost, session cost, plan limits) with a cold-send guard, keep-warm, board and handoff (all under `/session-band`) and an autonomous mode that clears and continues each handoff without you (needs the `session-handoff` skill). Fork of Cache Keeper by Nate Herk. |
 | [`session-reaper`](mods/session-reaper) | Archives desktop sessions idle for more than 60 minutes and stops idle process trees (MCP servers, dev servers) left behind by ended sessions, which otherwise fill RAM until other apps run out of memory. Windows and the desktop Code tab only; needs one permission rule in auto mode. |
 | [`skill-manager`](mods/skill-manager) | Lists every installed skill (user, project, plugin) in a pane with its source, use count and last use; checks GitHub for newer versions, updates a skill from its source, and moves unwanted skills to a trash folder. Command: `/skill-manager`. |
-| [`themes`](mods/themes) | Color themes for the Claude desktop and mobile apps, kept across sessions. First theme: GitHub Dark, the github.com dark look with GitHub's surfaces, text, accent and git colors and GitHub dark code highlighting (dark mode only). Command: `/themes`. |
+| [`themes`](mods/themes) | Color themes for Claude Desktop, kept across sessions. First theme: GitHub Dark, the github.com dark look with GitHub's surfaces, text, accent and git colors and GitHub dark code highlighting (dark mode only). Command: `/themes`. |
 
 ## VS Code extensions
 
