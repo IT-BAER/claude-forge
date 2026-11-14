@@ -1,0 +1,8 @@
+{
+  "name": "themes",
+  "description": "Color themes for the Claude desktop and mobile apps, switched with /themes. Includes GitHub Dark: the github.com dark look with GitHub dark code highlighting, dark mode only.",
+  "author": {
+    "name": "IT-BAER"
+  },
+  "license": "MIT"
+}

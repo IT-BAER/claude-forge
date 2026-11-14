@@ -34,6 +34,11 @@
       "name": "skill-manager",
       "source": "./mods/skill-manager",
       "description": "Side pane listing installed skills with scope, GitHub source, usage, update and delete; /skill-manager"
+    },
+    {
+      "name": "themes",
+      "source": "./mods/themes",
+      "description": "Color themes for the Claude desktop and mobile apps, switched with /themes; includes GitHub Dark (github.com dark look, GitHub dark code highlighting)"
     }
   ]
 }
