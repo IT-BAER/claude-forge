@@ -36,6 +36,8 @@ Dark mode only. With the app in light mode, the app keeps its own light colors. 
 
 Tested on 14 November 2026 with Claude Desktop 5.11492.5.0 (Code tab, Claude Code 2.1.325), by capturing the window and comparing it with github.com. Desktop draws one look for the whole window. After a Desktop restart the look drew at startup; before the restart, a newly opened session alone did not bring it.
 
+In split view, Desktop draws the look of the session in the left pane. An empty New session page there shows the app's own look; close it or open a session in it.
+
 Where Desktop's fixed design differs from github.com:
 
 - The title bar, prompt area and sidebar share one color slot, and the app draws the sidebar 20% darker: the sidebar is #010307, where github.com has #0d1117.
