@@ -146,3 +146,15 @@ Editor keys: `cellW` is the CSS width of one cell (default 7.92, measured on Cla
 ## License
 
 MIT, see the repository root.
+
+<br>
+
+## 💜 Support
+
+If you like this Project, consider supporting this and future work, which heavily relies on coffee:
+
+<div align="center">
+<a href="https://www.buymeacoffee.com/itbaer" target="_blank"><img src="https://github.com/user-attachments/assets/64107f03-ba5b-473e-b8ad-f3696fe06002" alt="Buy Me A Coffee" style="height: 60px; max-width: 217px;"></a>
+<br>
+<a href="https://www.paypal.com/donate/?hosted_button_id=5XXRC7THMTRRS" target="_blank">Donate via PayPal</a>
+</div>

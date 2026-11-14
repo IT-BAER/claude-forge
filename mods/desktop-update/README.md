@@ -50,3 +50,15 @@ Desktop's own updater follows the policy value `disableAutoUpdates` under `HKCU\
 - Windows with Windows PowerShell 5.1 in `C:\Windows\System32\WindowsPowerShell\v1.0`.
 - Claude Desktop installed as the MSIX package `Claude_pzs8sxrjxfjjc`.
 - For the auto-update switch: credentials of a local admin account for the UAC prompt.
+
+<br>
+
+## 💜 Support
+
+If you like this Project, consider supporting this and future work, which heavily relies on coffee:
+
+<div align="center">
+<a href="https://www.buymeacoffee.com/itbaer" target="_blank"><img src="https://github.com/user-attachments/assets/64107f03-ba5b-473e-b8ad-f3696fe06002" alt="Buy Me A Coffee" style="height: 60px; max-width: 217px;"></a>
+<br>
+<a href="https://www.paypal.com/donate/?hosted_button_id=5XXRC7THMTRRS" target="_blank">Donate via PayPal</a>
+</div>

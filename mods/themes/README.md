@@ -71,3 +71,15 @@ claude plugin test mods/themes
 ```
 
 `hooks/make-colors.js` and `hooks/make-colors.d.ts` are copied unchanged from Claude Code's `plugin-authoring` skill (Claude Code 2.1.325). They turn a few seed colors into the app's full palette and check contrast. Copy them again after a Claude Code update, because an old copy can fall behind the app's design system.
+
+<br>
+
+## 💜 Support
+
+If you like this Project, consider supporting this and future work, which heavily relies on coffee:
+
+<div align="center">
+<a href="https://www.buymeacoffee.com/itbaer" target="_blank"><img src="https://github.com/user-attachments/assets/64107f03-ba5b-473e-b8ad-f3696fe06002" alt="Buy Me A Coffee" style="height: 60px; max-width: 217px;"></a>
+<br>
+<a href="https://www.paypal.com/donate/?hosted_button_id=5XXRC7THMTRRS" target="_blank">Donate via PayPal</a>
+</div>
