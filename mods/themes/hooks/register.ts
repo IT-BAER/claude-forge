@@ -1,9 +1,10 @@
 import type { Register } from 'claude-code'
 
 import { githubDark } from './themes/github-dark'
+import { spaceThemes } from './themes/space'
 
 // The first theme is the default until the user picks one.
-const THEMES = [githubDark]
+const THEMES = [githubDark, ...spaceThemes]
 const OFF = 'off'
 
 const byId = (id: unknown) => THEMES.find(theme => theme.id === id)
@@ -21,6 +22,14 @@ export const register: Register = on => {
     const theme = fromStore(await $.store.get('theme'))
     if (theme) await $.theme.set(theme.look)
     return next(e)
+  })
+
+  // Every mod's backdrop comes by here, and only a window or a phone draws one.
+  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+    const theme = e.props.plugin === $.plugin.name ? spaceThemes.find(({ id }) => id === e.props.scene) : undefined
+    if (!theme || (e.surface !== 'desktop' && e.surface !== 'mobile')) return next(e)
+    const { Svg } = $.ui.resolve(e)
+    return Svg({ source: theme.scene(), alt: theme.alt, isInteractive: true })
   })
 
   on('command.run', { command: 'themes' }, async ($, e) => {

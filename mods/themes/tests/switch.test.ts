@@ -58,6 +58,10 @@ test('/themes <name> sets that theme now and in later sessions', async ($, on) =
 const LIST = [
   'Themes:',
   '- github-dark: GitHub Dark',
+  '- space-stars: Space Deep Field',
+  '- space-nebula: Space Nebula',
+  '- space-orbit: Space Orbit',
+  '- space-warp: Space Warp',
   "/themes <name> switches, /themes off returns to the app's own look.",
 ].join('\n')
 
@@ -80,7 +84,7 @@ test('an unknown name changes nothing and names the themes', async ($, on) => {
   await start($)
 
   expect(looks).toEqual(['GitHub Dark Default', 'GitHub Dark Default'])
-  expect(out.text).toBe('No theme named solarized. Themes: github-dark.')
+  expect(out.text).toBe('No theme named solarized. Themes: github-dark, space-stars, space-nebula, space-orbit, space-warp.')
 })
 
 test('a stored theme that no longer exists starts the default', async ($, on) => {

@@ -38,7 +38,7 @@
     {
       "name": "themes",
       "source": "./mods/themes",
-      "description": "Color themes for Claude Desktop, switched with /themes; includes GitHub Dark (github.com dark look, GitHub dark code highlighting)"
+      "description": "Color themes for Claude Desktop, switched with /themes; includes GitHub Dark (github.com dark look, GitHub dark code highlighting) and four animated space themes in the same colors"
     }
   ]
 }

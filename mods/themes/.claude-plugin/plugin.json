@@ -1,6 +1,6 @@
 {
   "name": "themes",
-  "description": "Color themes for Claude Desktop, switched with /themes. Includes GitHub Dark: the github.com dark look with GitHub dark code highlighting, dark mode only.",
+  "description": "Color themes for Claude Desktop, switched with /themes. Includes GitHub Dark: the github.com dark look with GitHub dark code highlighting, dark mode only. Four space themes add an animated scene behind the conversation in the same colors.",
   "author": {
     "name": "IT-BAER"
   },
