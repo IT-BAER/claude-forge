@@ -88,17 +88,22 @@ Tested on 15 November 2026 with Claude Desktop 5.11492.5 (Code tab, Claude Code 
 
 Stars, Nebula and Orbit move in 10 steps a second and Warp in 20, each scene on one shared grid, and only the meteor moves on every frame. This is on purpose: the app redraws the window whenever the scene changes, so motion on every frame of a fast display costs more than it shows, and a first version with one step a second looked like stutter.
 
-Measured in an idle session in a 1143x884 window, three samples of 2.5 seconds for each scene. "Changes" counts how often a strip of the scene differed between window captures taken about 55 times a second. "GPU" is the CPU use of the app's GPU process in percent of one core.
+Measured in idle sessions on that machine. "Changes" counts how often a strip of the scene differed between window captures taken about 55 times a second. "GPU" is the CPU use of the app's GPU process in percent of one core.
+
+In a 1143x884 window, three samples of 2.5 seconds for each look:
 
 | Look | Changes a second | GPU |
 | --- | --- | --- |
 | No scene (GitHub Dark) | 0 | 6 |
 | A scene that does not move | 0 | 6 |
-| The four space themes | 18 to 21 | 16 to 25 |
+| A test scene at 15 steps a second | 15 | 17 |
+| The four scenes at 20 steps a second | 18 to 21 | 16 to 25 |
 | A test scene that moves on every frame | 50 to 54, the capture limit | 30 |
 | The first version, one step a second | 2 | not measured this way |
 
-The CPU use of the app's renderer process ranged from 31 to 68 percent of one core in these runs, with no relation to the scene, so it is not in the table. Frosted glass against no glass made no measurable difference in a paired test (8 and 9 samples). A larger window was not measured this way.
+In a 2578x1398 window with Space Nebula, with a second window open beside it, nine samples for each run: 54 with the scene at 20 steps a second, 44 and 40 in the two runs at 10 steps. That is why the three calm scenes use 10. The same window without a scene was not measured in these runs.
+
+The CPU use of the app's renderer process ranged from 31 to 68 percent of one core in these runs, with no relation to the scene, so it is not in the tables. Frosted glass against no glass made no measurable difference in a paired test (8 and 9 samples).
 
 ## Install
 
