@@ -99,7 +99,8 @@ test('every build draws the same scene', () => {
 
 // The app redraws the window on every change of the scene. Motion on every frame is too costly on a
 // fast display, and one change a second reads as stutter. So everything but a meteor moves in steps
-// on one shared grid of 20 a second: every step is a whole number of twentieths, none longer than 0.2 s.
+// on one shared grid of 20 a second: every step is a whole number of twentieths,
+// and the finest step of each animation is at most 0.2 s.
 test('everything but a meteor moves on a shared grid of 20 steps a second', () => {
   const GRID = 1 / 20
   const onGrid = (seconds: number) => Math.abs(seconds / GRID - Math.round(seconds / GRID)) < 1e-6

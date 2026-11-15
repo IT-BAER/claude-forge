@@ -71,7 +71,7 @@ Four themes with the GitHub Dark colors and a moving scene behind the conversati
 
 | Name | Scene | Motion |
 | --- | --- | --- |
-| `space-stars` | A deep field of stars in three depths | Layers slide at different speeds, stars fade down and up, a meteor crosses about once a minute |
+| `space-stars` | A deep field of stars in three depths | Layers slide at different speeds, stars fade down and up, a meteor crosses about twice a minute |
 | `space-nebula` | The starfield behind blue, purple and pink clouds in the corners | Clouds breathe slowly, stars slide and fade, a meteor crosses about every 100 seconds |
 | `space-orbit` | The lit edge of a planet in the top right corner, with a moon | The moon circles the planet in 10 minutes, the planet's air glows, stars fade down and up |
 | `space-warp` | Streaks of starlight that run outward from the middle | Wave after wave, each from the middle to past the edge in 40 seconds; the strongest motion of the four |

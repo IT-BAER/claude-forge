@@ -106,7 +106,7 @@ const glow = (id: string, colour: string, opacity: number) =>
 // The app redraws the window whenever the scene changes, so motion on every frame of a fast display
 // (164 a second on the screen this was measured on) costs far more than it shows. Everything moves in
 // steps on one shared grid of FPS steps a second: loops and delays are whole steps long, so all
-// changes fall on the same instants. Only a meteor, about once a minute, moves every frame.
+// changes fall on the same instants. Only a meteor, for about 1.5 seconds each time, moves every frame.
 const FPS = 20
 const steps = (seconds: number) => `steps(${Math.round(seconds * FPS)})`
 
