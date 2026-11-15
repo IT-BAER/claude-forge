@@ -104,38 +104,49 @@ const glow = (id: string, colour: string, opacity: number) =>
   `<stop offset="1" stop-color="${colour}" stop-opacity="0"/></radialGradient>`
 
 // The app redraws the window whenever the scene changes, so motion on every frame of a fast display
-// (164 a second on the screen this was measured on) costs far more than it shows. Everything moves in
-// steps on one shared grid of FPS steps a second: loops and delays are whole steps long, so all
-// changes fall on the same instants. Only a meteor, for about 1.5 seconds each time, moves every frame.
-const FPS = 20
-const steps = (seconds: number) => `steps(${Math.round(seconds * FPS)})`
+// (164 a second on the screen this was measured on) costs far more than it shows. Everything in a scene
+// moves in steps on one shared grid: loops and delays are whole steps long, so all changes fall on
+// the same instants. Only a meteor, for about 1.5 seconds each time, moves every frame.
+// The calm scenes move slowly, so 10 steps a second keep each step below half a pixel at about a
+// third of the cost of 20; warp's streaks cross the window fast and need 20.
+const CALM_RATE = 10
+const WARP_RATE = 20
+const stepper = (rate: number) => (seconds: number) => `steps(${Math.round(seconds * rate)})`
 
 // Twinkle classes t0 to t6: [seconds of one loop, delay]. A loop fades down and up, half each way.
 const TWINKLES = [[8, 0], [6, -2], [10, -5], [4, -1], [12, -7], [14, -8], [16, -9]] as const
 
-const STYLE =
-  TWINKLES.map(([loop, delay], i) => `.t${i}{animation:tw ${loop}s ${steps(loop / 2)} ${delay}s infinite}`).join('') +
-  '@keyframes tw{0%,100%{opacity:1}50%{opacity:.3}}' +
-  `.dr1,.dr2,.dr3{animation:2400s ${steps(2400)} infinite}.dr1{animation-name:dr1}.dr2{animation-name:dr2}.dr3{animation-name:dr3}` +
-  '@keyframes dr1{to{transform:translateX(-1600px)}}@keyframes dr2{to{transform:translateX(-3200px)}}' +
-  '@keyframes dr3{to{transform:translateX(-4800px)}}' +
-  '.mt{opacity:0;animation:mt 60s linear infinite}' +
-  '@keyframes mt{0%{opacity:0;transform:translateX(0)}.4%{opacity:1}2%{opacity:1}2.6%{opacity:0;transform:translateX(640px)}100%{opacity:0;transform:translateX(640px)}}' +
-  `.nb{animation:nb 40s ${steps(40)} infinite alternate}` +
-  '@keyframes nb{from{opacity:.7;transform:scale(1)}to{opacity:1;transform:scale(1.14)}}' +
-  `.at{animation:at 18s ${steps(18)} infinite alternate}@keyframes at{from{opacity:.65}to{opacity:1}}` +
-  `.or{animation:or 600s ${steps(600)} infinite}@keyframes or{to{transform:rotate(360deg)}}` +
-  `.ro{animation:ro 600s ${steps(600)} infinite}@keyframes ro{to{transform:rotate(-360deg)}}` +
-  // The fade has parts of 6, 26 and 8 seconds: 40 steps in each keeps every change on the grid.
-  `.wp{transform-origin:800px 500px;animation:wps 40s ${steps(40)} infinite,wpo 40s ${steps(2)} infinite}` +
-  '@keyframes wps{from{transform:scale(.3)}to{transform:scale(2.4)}}' +
-  '@keyframes wpo{0%{opacity:0}15%{opacity:.85}80%{opacity:.85}100%{opacity:0}}' +
-  // A system that asks for reduced motion gets the resting picture.
-  '@media (prefers-reduced-motion:reduce){*{animation:none!important}}'
+/** A scene's stylesheet at `rate` steps a second; `extra` holds rules only that scene uses. */
+function style(rate: number, extra: string): string {
+  const steps = stepper(rate)
+  return (
+    TWINKLES.map(([loop, delay], i) => `.t${i}{animation:tw ${loop}s ${steps(loop / 2)} ${delay}s infinite}`).join('') +
+    '@keyframes tw{0%,100%{opacity:1}50%{opacity:.3}}' +
+    `.dr1,.dr2,.dr3{animation:2400s ${steps(2400)} infinite}.dr1{animation-name:dr1}.dr2{animation-name:dr2}.dr3{animation-name:dr3}` +
+    '@keyframes dr1{to{transform:translateX(-1600px)}}@keyframes dr2{to{transform:translateX(-3200px)}}' +
+    '@keyframes dr3{to{transform:translateX(-4800px)}}' +
+    '.mt{opacity:0;animation:mt 60s linear infinite}' +
+    '@keyframes mt{0%{opacity:0;transform:translateX(0)}.4%{opacity:1}2%{opacity:1}2.6%{opacity:0;transform:translateX(640px)}100%{opacity:0;transform:translateX(640px)}}' +
+    `.nb{animation:nb 40s ${steps(40)} infinite alternate}` +
+    '@keyframes nb{from{opacity:.7;transform:scale(1)}to{opacity:1;transform:scale(1.14)}}' +
+    `.at{animation:at 18s ${steps(18)} infinite alternate}@keyframes at{from{opacity:.65}to{opacity:1}}` +
+    `.or{animation:or 600s ${steps(600)} infinite}@keyframes or{to{transform:rotate(360deg)}}` +
+    `.ro{animation:ro 600s ${steps(600)} infinite}@keyframes ro{to{transform:rotate(-360deg)}}` +
+    extra +
+    // A system that asks for reduced motion gets the resting picture.
+    '@media (prefers-reduced-motion:reduce){*{animation:none!important}}'
+  )
+}
 
-const svg = (defs: string, body: string) =>
+// The fade has parts of 6, 26 and 8 seconds: 40 steps in each keeps every change on warp's grid.
+const WARP_STYLE =
+  `.wp{transform-origin:800px 500px;animation:wps 40s ${stepper(WARP_RATE)(40)} infinite,wpo 40s steps(40) infinite}` +
+  '@keyframes wps{from{transform:scale(.3)}to{transform:scale(2.4)}}' +
+  '@keyframes wpo{0%{opacity:0}15%{opacity:.85}80%{opacity:.85}100%{opacity:0}}'
+
+const svg = (rate: number, defs: string, body: string, extra = '') =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">` +
-  `<style>${STYLE}</style><defs>${CALM}${TRAIL}${defs}</defs>` +
+  `<style>${style(rate, extra)}</style><defs>${CALM}${TRAIL}${defs}</defs>` +
   `<rect width="${W}" height="${H}" fill="${PAGE}"/>${body}</svg>`
 
 /** Deep Field: three depths of stars that drift at different speeds, and a rare meteor. */
@@ -145,7 +156,7 @@ export function starsScene(): string {
     `<ellipse cx="120" cy="80" rx="700" ry="460" fill="url(#hz1)"/>` +
     `<ellipse cx="1520" cy="940" rx="680" ry="440" fill="url(#hz2)"/>`
   const meteors = meteor(140, 90, 24, 53, -20) + meteor(1180, 40, 152, 71, -48)
-  return svg(defs, haze + starfield(11, true) + calmVeil + meteors)
+  return svg(CALM_RATE, defs, haze + starfield(11, true) + calmVeil + meteors)
 }
 
 type Cloud = { x: number; y: number; rx: number; ry: number; glow: string; seconds: number; delay: number }
@@ -165,9 +176,9 @@ export function nebulaScene(): string {
   const clouds = CLOUDS.map(
     c =>
       `<ellipse class="nb" cx="${c.x}" cy="${c.y}" rx="${c.rx}" ry="${c.ry}" fill="url(#${c.glow})" ` +
-      `style="transform-origin:${c.x}px ${c.y}px;animation-duration:${c.seconds}s;animation-timing-function:${steps(c.seconds)};animation-delay:${c.delay}s"/>`,
+      `style="transform-origin:${c.x}px ${c.y}px;animation-duration:${c.seconds}s;animation-timing-function:${stepper(CALM_RATE)(c.seconds)};animation-delay:${c.delay}s"/>`,
   ).join('')
-  return svg(defs, clouds + starfield(23, true) + calmVeil + meteor(1250, 70, 158, 97, -60))
+  return svg(CALM_RATE, defs, clouds + starfield(23, true) + calmVeil + meteor(1250, 70, 158, 97, -60))
 }
 
 /** Orbit: a planet's lit edge in the top right corner, its air glowing, and a moon that circles it. */
@@ -195,7 +206,7 @@ export function orbitScene(): string {
     `<g transform="translate(${cx} ${cy}) rotate(-10) scale(1 .6) rotate(130)"><g class="or">` +
     `<g transform="translate(600 0)"><g class="ro"><g transform="rotate(-130) scale(1 ${n(1 / 0.6)})">` +
     `<circle r="13" fill="url(#moon)"/></g></g></g></g></g>`
-  return svg(defs, starfield(37, false) + calmVeil + planet + moon)
+  return svg(CALM_RATE, defs, starfield(37, false) + calmVeil + planet + moon)
 }
 
 /** Warp: streaks that run outward from the middle, wave after wave, faint where the words sit. */
@@ -217,5 +228,5 @@ export function warpScene(): string {
     streaks += path(d, colour, 1.3, ` class="wp" opacity=".7" style="animation-delay:${-4 * wave}s"`)
   }
   const core = `<ellipse cx="800" cy="500" rx="560" ry="380" fill="url(#core)"/>`
-  return svg(glow('core', ACCENT, 0.16), core + starLayer(stream(59), FAR, 0) + streaks + calmVeil)
+  return svg(WARP_RATE, glow('core', ACCENT, 0.16), core + starLayer(stream(59), FAR, 0) + streaks + calmVeil, WARP_STYLE)
 }

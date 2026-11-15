@@ -86,7 +86,7 @@ Each scene is one SVG that the mod builds as a string and the app draws in a san
 
 Tested on 15 November 2026 with Claude Desktop 5.11492.5 (Code tab, Claude Code 2.1.325) on Windows 11 with a 164 Hz display, by setting each theme in a session and capturing the window. All four scenes drew behind the conversation, and the text stayed readable.
 
-The scenes move in 20 steps a second on one shared grid, and only the meteor moves on every frame. This is on purpose: the app redraws the window whenever the scene changes, so motion on every frame of a fast display costs more than it shows, and a first version with one step a second looked like stutter.
+Stars, Nebula and Orbit move in 10 steps a second and Warp in 20, each scene on one shared grid, and only the meteor moves on every frame. This is on purpose: the app redraws the window whenever the scene changes, so motion on every frame of a fast display costs more than it shows, and a first version with one step a second looked like stutter.
 
 Measured in an idle session in a 1143x884 window, three samples of 2.5 seconds for each scene. "Changes" counts how often a strip of the scene differed between window captures taken about 55 times a second. "GPU" is the CPU use of the app's GPU process in percent of one core.
 

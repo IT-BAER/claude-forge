@@ -97,15 +97,23 @@ test('every build draws the same scene', () => {
   }
 })
 
+// Steps a second: the calm scenes move slowly, so 10 keeps each step below half a pixel; warp's streaks need 20.
+const RATES = [
+  [starsScene, 10],
+  [nebulaScene, 10],
+  [orbitScene, 10],
+  [warpScene, 20],
+] as const
+
 // The app redraws the window on every change of the scene. Motion on every frame is too costly on a
 // fast display, and one change a second reads as stutter. So everything but a meteor moves in steps
-// on one shared grid of 20 a second: every step is a whole number of twentieths,
-// and the finest step of each animation is at most 0.2 s.
-test('everything but a meteor moves on a shared grid of 20 steps a second', () => {
-  const GRID = 1 / 20
-  const onGrid = (seconds: number) => Math.abs(seconds / GRID - Math.round(seconds / GRID)) < 1e-6
-
-  for (const build of BUILDERS) {
+// on one shared grid per scene: every step is a whole number of grid steps, the finest step of
+// each animation is at most 0.2 s, and the finest step of the scene is exactly one grid step.
+test('everything but a meteor moves on one shared grid: 10 steps a second, warp 20', () => {
+  for (const [build, rate] of RATES) {
+    const GRID = 1 / rate
+    const onGrid = (seconds: number) => Math.abs(seconds / GRID - Math.round(seconds / GRID)) < 1e-6
+    let finest = Infinity
     const source = build()
     const stepped = source.replace(/\.mt\{[^}]*\}/, '')
 
@@ -125,18 +133,21 @@ test('everything but a meteor moves on a shared grid of 20 steps a second', () =
       parts.set(name!, sorted.slice(1).map((stop, i) => (stop - sorted[i]!) / 100))
     }
     const loops = [
-      ...source.matchAll(/(?:animation:|,)(\w*) ?([\d.]+)s steps\((\d+)\)/g),
+      // The drift classes share one shorthand without a name; their keyframes are dr1 to dr3, alike in shape.
+      ...source.matchAll(/(?:animation:|,)(?:([a-z]\w*) )?([\d.]+)s steps\((\d+)\)/g),
       ...[...source.matchAll(/animation-duration:([\d.]+)s;animation-timing-function:steps\((\d+)\)/g)].map(
         ([all, seconds, count]) => [all, 'nb', seconds, count],
       ),
     ]
     expect(loops.length).toBeGreaterThan(0)
     for (const [, name, seconds, count] of loops) {
-      const lengths = (parts.get(name!) ?? [1]).map(part => (part * Number(seconds)) / Number(count))
+      const lengths = (parts.get(name ?? 'dr1') ?? [1]).map(part => (part * Number(seconds)) / Number(count))
 
       expect(lengths.every(onGrid)).toBe(true)
       expect(Math.min(...lengths)).toBeLessThan(0.2 + 1e-6)
+      finest = Math.min(finest, ...lengths)
     }
+    expect(Math.abs(finest - GRID) < 1e-6).toBe(true)
   }
 })
 
